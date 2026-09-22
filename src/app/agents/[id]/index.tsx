@@ -1,0 +1,395 @@
+import React, { useEffect } from 'react';
+import { View, ScrollView, StyleSheet, RefreshControl } from 'react-native';
+import { Theme } from '@/constants/theme';
+import { H1, H2, H3, Body, Caption, Overline, Mono } from '@/components/Typography';
+import { Card, CardContent } from '@/components/Card';
+import { Button } from '@/components/Button';
+import { Badge } from '@/components/Badge';
+import { Separator } from '@/components/Separator';
+import { EmptyState } from '@/components/EmptyState';
+import { Modal } from '@/components/Modal';
+import { useAppStore } from '@/store/appStore';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { AIAgent, AgentStatus, PhoneNumber } from '@/types';
+
+export default function AgentDetailScreen() {
+  const { params } = useLocalSearchParams();
+  const agentId = params.id as string;
+  const { agents, removeAgent, updateAgent } = useAppStore();
+  const router = useRouter();
+
+  const agent = agents.find((a) => a.id === agentId);
+
+  const [showDisconnectModal, setShowDisconnectModal] = React.useState(false);
+
+  if (!agent) {
+    return (
+      <View style={styles.container}>
+        <EmptyState
+          title="Agent Not Found"
+          description="This agent may have been removed or the ID is invalid."
+          action={{ label: 'Back to Agents', onPress: () => router.back() }}
+        />
+      </View>
+    );
+  }
+
+  const statusVariants: Record<AgentStatus, BadgeProps['variant']> = {
+    connecting: 'processing',
+    connected: 'success',
+    disconnected: 'default',
+    error: 'error',
+    syncing: 'processing',
+    paused: 'warning',
+  };
+
+  const statusLabels: Record<AgentStatus, string> = {
+    connecting: 'Connecting',
+    connected: 'Connected',
+    disconnected: 'Disconnected',
+    error: 'Error',
+    syncing: 'Syncing',
+    paused: 'Paused',
+  };
+
+  const handleDisconnect = () => {
+    removeAgent(agent.id);
+    router.back();
+  };
+
+  const handleAddPhoneNumber = () => {
+    router.push(`/agents/${agent.id}/phone-number`);
+  };
+
+  return (
+    <View style={styles.container}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={false}
+            colors={[Theme.colors.primaryBlue]}
+            onRefresh={() => {}}
+          />
+        }
+      >
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <H1 weight="bold" color="textPrimary">{agent.name}</H1>
+            <Badge variant={statusVariants[agent.status]} size="md">
+              {statusLabels[agent.status]}
+            </Badge>
+          </View>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={() => setShowDisconnectModal(true)}
+            style={styles.disconnectButton}
+          >
+            <Ionicons name="link" size={16} style={{ marginRight: 4 }} />
+            Disconnect
+          </Button>
+        </View>
+
+        {agent.description && (
+          <Body color="textSecondary" style={styles.description}>{agent.description}</Body>
+        )}
+
+        <Separator style={styles.sectionSeparator} />
+
+        <View style={styles.section}>
+          <H2 weight="semiBold" color="textPrimary" style={styles.sectionTitle}>
+            Configuration
+          </H2>
+          <Card variant="outlined" padding="md" style={styles.configCard}>
+            <View style={styles.configRow}>
+              <Caption color="textMuted">Provider</Caption>
+              <Body color="textPrimary">{agent.providerId}</Body>
+            </View>
+            {agent.version && (
+              <View style={styles.configRow}>
+                <Caption color="textMuted">Agent Version</Caption>
+                <Mono color="textSecondary">{agent.version}</Mono>
+              </View>
+            )}
+            {agent.configVersion && (
+              <View style={styles.configRow}>
+                <Caption color="textMuted">Config Version</Caption>
+                <Mono color="textSecondary">{agent.configVersion}</Mono>
+              </View>
+            )}
+            <View style={styles.configRow}>
+              <Caption color="textMuted">Created</Caption>
+              <Body color="textSecondary">{formatDate(agent.createdAt)}</Body>
+            </View>
+            <View style={styles.configRow}>
+              <Caption color="textMuted">Last Sync</Caption>
+              <Body color="textSecondary">
+                {agent.lastSyncAt ? formatRelativeTime(agent.lastSyncAt) : 'Never'}
+              </Body>
+            </View>
+          </Card>
+        </View>
+
+        <Separator style={styles.sectionSeparator} />
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <H2 weight="semiBold" color="textPrimary">Phone Numbers</H2>
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={handleAddPhoneNumber}
+              style={styles.addButton}
+            >
+              <Ionicons name="add" size={16} style={{ marginRight: 4 }} />
+              Add Number
+            </Button>
+          </View>
+
+          {agent.phoneNumbers.length === 0 ? (
+            <Card variant="outlined" padding="lg" style={styles.emptyPhoneCard}>
+              <View style={styles.emptyPhoneContent}>
+                <View style={styles.emptyPhoneIcon}>
+                  <Ionicons name="call-outline" size={32} color={Theme.colors.textMuted} />
+                </View>
+                <H3 weight="semiBold" color="textPrimary" style={styles.emptyPhoneTitle}>
+                  No Phone Numbers
+                </H3>
+                <Body color="textSecondary" style={styles.emptyPhoneDesc}>
+                  Add a phone number to start receiving and making calls through this agent.
+                </Body>
+                <Button variant="primary" onPress={handleAddPhoneNumber} style={styles.emptyPhoneButton}>
+                  Add Phone Number
+                </Button>
+              </View>
+            </Card>
+          ) : (
+            <View style={styles.phoneNumbersList}>
+              {agent.phoneNumbers.map((phone) => (
+                <Card key={phone.id} variant="outlined" padding="md" style={styles.phoneCard}>
+                  <View style={styles.phoneCardContent}>
+                    <View style={styles.phoneInfo} flex={1}>
+                      <View style={styles.phoneHeader}>
+                        <H3 weight="semiBold" color="textPrimary">{phone.number}</H3>
+                        <Badge
+                          variant={phone.isActive ? 'success' : 'default'}
+                          size="sm"
+                        >
+                          {phone.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </View>
+                      <View style={styles.phoneMeta}>
+                        <Caption color="textMuted">
+                          {phone.direction === 'inbound'
+                            ? 'Inbound only'
+                            : phone.direction === 'outbound'
+                            ? 'Outbound only'
+                            : 'Inbound & Outbound'}
+                        </Caption>
+                        <Caption color="textMuted" style={{ marginLeft: Theme.spacing[3] }}>
+                          Consent: {phone.recordingConsent.requireDisclosure ? 'Required' : 'Not required'}
+                        </Caption>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={Theme.colors.textMuted} />
+                  </View>
+                </Card>
+              ))}
+            </View>
+          )}
+        </View>
+
+        <Separator style={styles.sectionSeparator} />
+
+        <View style={styles.section}>
+          <H2 weight="semiBold" color="textPrimary" style={styles.sectionTitle}>
+            Processing Configuration
+          </H2>
+          <Card variant="outlined" padding="md" style={styles.configCard}>
+            {Object.entries(agent.configuration).map(([key, value]) => (
+              <View key={key} style={styles.configRow}>
+                <Caption color="textMuted">{formatKey(key)}</Caption>
+                <Body color="textSecondary">{String(value)}</Body>
+              </View>
+            ))}
+          </Card>
+        </View>
+
+        <View style={styles.bottomSpacer} />
+      </ScrollView>
+
+      <Modal
+        visible={showDisconnectModal}
+        onClose={() => setShowDisconnectModal(false)}
+        size="sm"
+      >
+        <View style={styles.modalContent}>
+          <H3 weight="semiBold" color="textPrimary">Disconnect Agent</H3>
+          <Body color="textSecondary" style={styles.modalText}>
+            {`Are you sure you want to disconnect "${agent.name}"? This will remove the agent and all its configuration. Conversation history will be preserved.`}
+          </Body>
+          <View style={styles.modalActions}>
+            <Button variant="ghost" fullWidth onPress={() => setShowDisconnectModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger" fullWidth onPress={handleDisconnect}>
+              Disconnect
+            </Button>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+function formatDate(dateString: string): string {
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return formatDate(dateString);
+}
+
+function formatKey(key: string): string {
+  return key
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Theme.colors.backgroundPrimary,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: Theme.spacing[5],
+    paddingTop: Theme.spacing[4],
+    paddingBottom: Theme.spacing[10],
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: Theme.spacing[4],
+    gap: Theme.spacing[3],
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  disconnectButton: {
+    marginTop: Theme.spacing[2],
+  },
+  description: {
+    marginBottom: Theme.spacing[4],
+    lineHeight: 22,
+  },
+  sectionSeparator: {
+    marginVertical: Theme.spacing[4],
+  },
+  section: {
+    marginBottom: Theme.spacing[6],
+  },
+  sectionTitle: {
+    marginBottom: Theme.spacing[3],
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Theme.spacing[3],
+  },
+  addButton: {},
+  configCard: {
+    gap: Theme.spacing[3],
+  },
+  configRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Theme.spacing[2],
+  },
+  emptyPhoneCard: {},
+  emptyPhoneContent: {
+    alignItems: 'center',
+    gap: Theme.spacing[3],
+  },
+  emptyPhoneIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: Theme.colors.surfaceElevated,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyPhoneTitle: {
+    textAlign: 'center',
+  },
+  emptyPhoneDesc: {
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+  emptyPhoneButton: {
+    minWidth: 200,
+  },
+  phoneNumbersList: {
+    gap: Theme.spacing[3],
+  },
+  phoneCard: {},
+  phoneCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  phoneInfo: {},
+  phoneHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Theme.spacing[1],
+  },
+  phoneMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalContent: {
+    gap: Theme.spacing[3],
+  },
+  modalText: {
+    lineHeight: 22,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: Theme.spacing[3],
+    marginTop: Theme.spacing[2],
+  },
+  bottomSpacer: {
+    height: 100,
+  },
+});
+
+type BadgeProps = {
+  variant?: 'default' | 'success' | 'warning' | 'error' | 'info' | 'processing';
+  size?: 'sm' | 'md';
+};
