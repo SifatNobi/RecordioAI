@@ -6,6 +6,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/services/queryClient';
 import { useAppStore } from '@/store/appStore';
 import { useEntitlementStore } from '@/store/entitlementStore';
+import { useRevenueCatStore } from '@/store/revenuecatStore';
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   // Keep the app usable if the splash API is unavailable.
@@ -19,12 +20,14 @@ export default function RootLayout() {
     let active = true;
 
     // Optional store initialization is deferred off the critical path and
-    // isolated so a failure can never block first paint.
+    // isolated so a failure can never block first paint. RevenueCat is
+    // configured exactly once here (idempotent across reloads).
     Promise.resolve()
       .then(() => {
         if (!active) return;
         initializeStores();
         initializeEntitlements();
+        useRevenueCatStore.getState().initialize();
       })
       .catch(() => {});
 

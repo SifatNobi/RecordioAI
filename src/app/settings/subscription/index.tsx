@@ -1,29 +1,50 @@
-import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet , Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Theme } from '@/constants/theme';
-import { H1, H2, H3, H4, Body, Caption, Overline } from '@/components/Typography';
+import { H1, H2, H3, Body, Caption } from '@/components/Typography';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
-import { Separator } from '@/components/Separator';
+import { LoadingState } from '@/components/LoadingState';
+import { ErrorState } from '@/components/ErrorState';
 import { useEntitlementStore } from '@/store/entitlementStore';
-import { useRouter } from 'expo-router';
+import { useRevenueCatStore } from '@/store/revenuecatStore';
 import { Ionicons } from '@expo/vector-icons';
 import { SubscriptionPlan } from '@/types';
 
-
-
 export default function SubscriptionScreen() {
-  const { plans, currentPlanId, hasEntitlement, setCurrentPlan } = useEntitlementStore();
-  const router = useRouter();
+  const { plans, currentPlanId } = useEntitlementStore();
+  const {
+    status,
+    offeringsLoading,
+    offeringsError,
+    priceByPlan,
+    packageByPlan,
+    purchasingPlanId,
+    purchaseError,
+    restoring,
+    initialize,
+    loadOfferings,
+    purchase,
+    restore,
+    clearRestoreMessage,
+  } = useRevenueCatStore();
+
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [showTrialModal, setShowTrialModal] = useState(false);
 
   const currentPlan = plans.find((p) => p.id === currentPlanId);
+  const hasLoadedOfferings = Object.keys(packageByPlan).length > 0;
+  const isProcessing = purchasingPlanId !== null || restoring;
 
-  const handlePlanSelect = (plan: SubscriptionPlan) => {
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
+  const handlePlanSelect = async (plan: SubscriptionPlan) => {
+    if (isProcessing) return;
+
     if (plan.isEnterprise) {
-      // Show contact sales
       Alert.alert('Enterprise', 'Contact sales for custom pricing', [{ text: 'OK' }]);
       return;
     }
@@ -33,32 +54,105 @@ export default function SubscriptionScreen() {
       return;
     }
 
-    setSelectedPlan(plan);
+    await handleSubscribe(plan);
   };
 
-  const handleSubscribe = () => {
-    if (!selectedPlan) return;
+  const handleSubscribe = async (plan: SubscriptionPlan) => {
+    if (purchasingPlanId) return;
 
-    // In a real app, this would call RevenueCat to initiate purchase
-    console.log('Initiating purchase for:', selectedPlan.id);
-    Alert.alert(
-      'Purchase',
-      `Starting purchase flow for ${selectedPlan.name}...`,
-      [{ text: 'OK' }]
-    );
+    if (plan.id !== selectedPlan?.id) {
+      setSelectedPlan(plan);
+      return;
+    }
+
+    const customerInfo = await purchase(plan.id);
+
+    if (customerInfo) {
+      const activePlanId = useRevenueCatStore.getState().currentPlanId;
+      const activePlan = plans.find((p) => p.id === activePlanId);
+      Alert.alert(
+        'Purchase Successful',
+        `You now have access to ${activePlan?.name ?? plan.name}.`,
+        [{ text: 'OK' }]
+      );
+    } else {
+      const message = useRevenueCatStore.getState().purchaseError;
+      Alert.alert(
+        'Purchase Not Completed',
+        message || 'The purchase could not be completed. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
-  const handleRestore = () => {
-    // In a real app, this would call RevenueCat restorePurchases
-    console.log('Restoring purchases');
-    Alert.alert('Restore', 'Restoring purchases...', [{ text: 'OK' }]);
+  const handleRestore = async () => {
+    if (restoring) return;
+
+    await restore();
+    const message = useRevenueCatStore.getState().restoreMessage;
+    clearRestoreMessage();
+
+    const title =
+      message?.kind === 'success'
+        ? 'Purchases Restored'
+        : message?.kind === 'error'
+          ? 'Restore Failed'
+          : 'No Purchases Found';
+    Alert.alert(title, message?.text ?? 'No previous purchases were found.', [
+      { text: 'OK' },
+    ]);
   };
 
   const handleStartTrial = () => {
-    // In a real app, this would call RevenueCat to start trial
-    console.log('Starting trial');
     setShowTrialModal(false);
-    Alert.alert('Trial Started', 'Your 7-day free trial has begun!', [{ text: 'OK' }]);
+  };
+
+  const renderPlansSection = () => {
+    if (offeringsError) {
+      return (
+        <ErrorState
+          title="Plans Unavailable"
+          message={offeringsError}
+          onRetry={loadOfferings}
+          showRetry
+          style={styles.stateBlock}
+        />
+      );
+    }
+
+    if (status === 'uninitialized' || (offeringsLoading && !hasLoadedOfferings)) {
+      return (
+        <LoadingState
+          label="Loading plans from RevenueCat…"
+          style={styles.stateBlock}
+        />
+      );
+    }
+
+    return (
+      <View style={styles.plansGrid}>
+        {plans
+          .filter((p) => !p.isEnterprise)
+          .map((plan) => {
+            const isCurrent = plan.id === currentPlanId;
+            const isSelected = selectedPlan?.id === plan.id;
+            const isPurchasing = purchasingPlanId === plan.id;
+
+            return (
+              <PlanCard
+                key={plan.id}
+                plan={plan}
+                isCurrent={isCurrent}
+                isSelected={isSelected}
+                isPurchasing={isPurchasing}
+                disabled={isProcessing}
+                displayPrice={priceByPlan[plan.id]}
+                onPress={() => handlePlanSelect(plan)}
+              />
+            );
+          })}
+      </View>
+    );
   };
 
   return (
@@ -85,7 +179,7 @@ export default function SubscriptionScreen() {
               <Body color="textSecondary">
                 {currentPlan.price === 0
                   ? 'Free'
-                  : `$${currentPlan.price.toFixed(2)}/${currentPlan.billingPeriod}`}
+                  : `${priceByPlan[currentPlan.id] ?? `$${currentPlan.price.toFixed(2)}`}/month`}
               </Body>
             </View>
           </View>
@@ -99,19 +193,7 @@ export default function SubscriptionScreen() {
         <H2 weight="semiBold" color="textPrimary" style={styles.sectionTitle}>
           Available Plans
         </H2>
-        <View style={styles.plansGrid}>
-          {plans
-            .filter((p) => !p.isEnterprise)
-            .map((plan) => (
-              <PlanCard
-                key={plan.id}
-                plan={plan}
-                isCurrent={plan.id === currentPlanId}
-                isSelected={selectedPlan?.id === plan.id}
-                onPress={() => handlePlanSelect(plan)}
-              />
-            ))}
-        </View>
+        {renderPlansSection()}
       </View>
 
       <View style={styles.section}>
@@ -136,7 +218,19 @@ export default function SubscriptionScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Button variant="ghost" fullWidth onPress={handleRestore} style={styles.restoreButton}>
+        {purchaseError !== null && (
+          <Caption color="error" style={styles.stateMessage}>
+            {purchaseError}
+          </Caption>
+        )}
+        <Button
+          variant="ghost"
+          fullWidth
+          onPress={handleRestore}
+          loading={restoring}
+          disabled={isProcessing}
+          style={styles.restoreButton}
+        >
           <Ionicons name="refresh" size={18} style={{ marginRight: 8 }} />
           Restore Purchases
         </Button>
@@ -151,11 +245,17 @@ function PlanCard({
   plan,
   isCurrent,
   isSelected,
+  isPurchasing,
+  disabled,
+  displayPrice,
   onPress,
 }: {
   plan: SubscriptionPlan;
   isCurrent: boolean;
   isSelected: boolean;
+  isPurchasing: boolean;
+  disabled: boolean;
+  displayPrice?: string;
   onPress: () => void;
 }) {
   const isPopular = plan.isPopular;
@@ -182,7 +282,9 @@ function PlanCard({
       </View>
       <View style={styles.planCardPrice}>
         <H1 weight="bold" color="textPrimary" style={styles.price}>
-          {plan.price === 0 ? 'Free' : `$${plan.price.toFixed(2)}`}
+          {plan.price === 0
+            ? 'Free'
+            : displayPrice ?? `$${plan.price.toFixed(2)}`}
         </H1>
         {plan.price > 0 && (
           <Caption color="textMuted" style={styles.period}>
@@ -208,8 +310,16 @@ function PlanCard({
         fullWidth
         style={styles.planCardButton}
         onPress={onPress}
+        loading={isPurchasing}
+        disabled={disabled && !isPurchasing}
       >
-        {isCurrent ? 'Current Plan' : isSelected ? 'Subscribe' : 'Select'}
+        {isCurrent
+          ? 'Current Plan'
+          : isSelected
+            ? isPurchasing
+              ? 'Processing…'
+              : 'Subscribe'
+            : 'Select'}
       </Button>
     </Card>
   );
@@ -253,6 +363,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     marginBottom: Theme.spacing[3],
+  },
+  stateBlock: {
+    minHeight: 200,
+  },
+  stateMessage: {
+    textAlign: 'center',
+    marginBottom: Theme.spacing[2],
   },
   plansGrid: {
     gap: Theme.spacing[3],

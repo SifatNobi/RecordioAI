@@ -48,12 +48,16 @@ class RecordingForegroundService : Service() {
         @Volatile
         private var currentRecordingType: String = "conversation"
 
+        @JvmStatic
         fun getCurrentState(): String = currentState
 
+        @JvmStatic
         fun getCurrentDuration(): Int = currentDuration
 
+        @JvmStatic
         fun getCurrentPaused(): Boolean = currentPaused
 
+        @JvmStatic
         fun getCurrentRecordingType(): String = currentRecordingType
     }
 
