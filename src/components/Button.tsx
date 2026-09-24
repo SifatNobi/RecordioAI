@@ -20,7 +20,7 @@ interface ButtonProps extends TouchableOpacityProps {
   children: React.ReactNode;
 }
 
-const variantStyles: Record<ButtonProps['variant'], ViewStyle> = {
+const variantStyles: Record<NonNullable<ButtonProps['variant']>, ViewStyle> = {
   primary: { backgroundColor: Theme.colors.buttonPrimary },
   secondary: { backgroundColor: Theme.colors.buttonSecondary, borderWidth: 1, borderColor: Theme.colors.border },
   danger: { backgroundColor: Theme.colors.buttonDanger },
@@ -28,7 +28,7 @@ const variantStyles: Record<ButtonProps['variant'], ViewStyle> = {
   outline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: Theme.colors.primaryBlue },
 };
 
-const variantTextColors: Record<ButtonProps['variant'], keyof typeof Theme.colors> = {
+const variantTextColors: Record<NonNullable<ButtonProps['variant']>, keyof typeof Theme.colors> = {
   primary: 'textOnPrimary',
   secondary: 'textPrimary',
   danger: 'textOnPrimary',
@@ -36,7 +36,7 @@ const variantTextColors: Record<ButtonProps['variant'], keyof typeof Theme.color
   outline: 'primaryBlue',
 };
 
-const variantPressedStyles: Record<ButtonProps['variant'], ViewStyle> = {
+const variantPressedStyles: Record<NonNullable<ButtonProps['variant']>, ViewStyle> = {
   primary: { backgroundColor: Theme.colors.buttonPrimaryPressed },
   secondary: { backgroundColor: Theme.colors.buttonSecondaryPressed },
   danger: { backgroundColor: Theme.colors.buttonDangerPressed },
@@ -44,19 +44,19 @@ const variantPressedStyles: Record<ButtonProps['variant'], ViewStyle> = {
   outline: { backgroundColor: 'rgba(0, 102, 255, 0.1)' },
 };
 
-const sizeStyles: Record<ButtonProps['size'], ViewStyle> = {
+const sizeStyles: Record<NonNullable<ButtonProps['size']>, ViewStyle> = {
   sm: { paddingHorizontal: Theme.spacing[3], paddingVertical: Theme.spacing[2], borderRadius: Theme.borderRadius.base },
   md: { paddingHorizontal: Theme.spacing[5], paddingVertical: Theme.spacing[3], borderRadius: Theme.borderRadius.lg },
   lg: { paddingHorizontal: Theme.spacing[6], paddingVertical: Theme.spacing[4], borderRadius: Theme.borderRadius.lg },
 };
 
-const sizeTextStyles: Record<ButtonProps['size'], TextStyle> = {
+const sizeTextStyles: Record<NonNullable<ButtonProps['size']>, TextStyle> = {
   sm: { fontSize: Theme.typography.fontSize.sm },
   md: { fontSize: Theme.typography.fontSize.base },
   lg: { fontSize: Theme.typography.fontSize.lg },
 };
 
-export const Button = React.forwardRef<TouchableOpacity, ButtonProps>(
+export const Button = React.forwardRef<React.ElementRef<typeof TouchableOpacity>, ButtonProps>(
   (
     {
       variant = 'primary',

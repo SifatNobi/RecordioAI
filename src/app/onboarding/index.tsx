@@ -8,7 +8,17 @@ import { useOnboarding } from '@/hooks/useTheme';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-const ONBOARDING_STEPS = [
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+interface OnboardingStep {
+  id: number;
+  title: string;
+  description: string;
+  icon: IoniconName;
+  primaryColor: string;
+}
+
+const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: 0,
     title: 'Prove What Your AI Promised.',
@@ -20,7 +30,7 @@ const ONBOARDING_STEPS = [
     id: 1,
     title: 'Connect Your AI Agent.',
     description: 'Integrate with your AI voice agent platform. RecordioAI receives conversation data directly from supported providers — no manual recording required.',
-    icon: 'cpu',
+    icon: 'hardware-chip',
     primaryColor: Theme.colors.brightBlue,
   },
   {
@@ -40,7 +50,7 @@ const ONBOARDING_STEPS = [
 ];
 
 export default function OnboardingScreen() {
-  const { currentStep, nextStep, complete, onboarding } = useOnboarding();
+  const { currentStep, nextStep, complete } = useOnboarding();
   const router = useRouter();
 
   const step = ONBOARDING_STEPS[currentStep];

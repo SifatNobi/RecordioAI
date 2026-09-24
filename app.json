@@ -13,7 +13,8 @@
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": false
-        }
+        },
+        "NSMicrophoneUsageDescription": "RecordioAI uses the microphone to capture conversation audio for transcription and AI analysis."
       }
     },
     "android": {
@@ -29,8 +30,7 @@
       "permissions": [
         "INTERNET",
         "ACCESS_NETWORK_STATE"
-      ],
-      "edgeToEdgeEnabled": true
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -40,6 +40,7 @@
       "expo-status-bar",
       "expo-secure-store",
       "expo-font",
+      "./plugins/withRecordioRecording",
       [
         "expo-build-properties",
         {
@@ -49,7 +50,8 @@
             "kotlinVersion": "2.1.20"
           }
         }
-      ]
+      ],
+      "expo-splash-screen"
     ],
     "extra": {
       "eas": {

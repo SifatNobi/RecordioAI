@@ -8,7 +8,7 @@ interface TypographyProps extends TextProps {
   color?: keyof typeof Theme.colors;
 }
 
-const variantStyles: Record<TypographyProps['variant'], TextStyle> = {
+const variantStyles: Record<NonNullable<TypographyProps['variant']>, TextStyle> = {
   h1: {
     fontSize: Theme.typography.fontSize['6xl'],
     lineHeight: Theme.typography.fontSize['6xl'] * Theme.typography.lineHeight.tight,
@@ -74,7 +74,6 @@ export const Typography = React.forwardRef<Text, TypographyProps>(
       variant = 'body',
       weight,
       color = 'textPrimary',
-      className,
       style,
       children,
       ...props

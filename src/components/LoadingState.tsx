@@ -9,7 +9,7 @@ interface LoadingStateProps extends ViewProps {
   overlay?: boolean;
 }
 
-const sizeValues: Record<LoadingStateProps['size'], number> = { sm: 20, md: 28, lg: 36 };
+const sizeValues: Record<NonNullable<LoadingStateProps['size']>, number> = { sm: 20, md: 28, lg: 36 };
 
 export const LoadingState = React.forwardRef<View, LoadingStateProps>(({ size = 'md', label, overlay = false, style, ...props }, ref) => (
   <View ref={ref} style={[overlay ? styles.overlayContainer : styles.container, style]} {...props}>

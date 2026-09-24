@@ -14,8 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { AIAgent, AgentStatus, PhoneNumber } from '@/types';
 
 export default function AgentDetailScreen() {
-  const { params } = useLocalSearchParams();
-  const agentId = params.id as string;
+  const { id: rawId } = useLocalSearchParams();
+  const agentId = Array.isArray(rawId) ? rawId[0] : String(rawId ?? '');
   const { agents, removeAgent, updateAgent } = useAppStore();
   const router = useRouter();
 
@@ -171,7 +171,7 @@ export default function AgentDetailScreen() {
               {agent.phoneNumbers.map((phone) => (
                 <Card key={phone.id} variant="outlined" padding="md" style={styles.phoneCard}>
                   <View style={styles.phoneCardContent}>
-                    <View style={styles.phoneInfo} flex={1}>
+                    <View style={[styles.phoneInfo, { flex: 1 }]}>
                       <View style={styles.phoneHeader}>
                         <H3 weight="semiBold" color="textPrimary">{phone.number}</H3>
                         <Badge

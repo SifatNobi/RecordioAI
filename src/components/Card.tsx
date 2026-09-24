@@ -8,13 +8,13 @@ interface CardProps extends ViewProps {
   onPress?: () => void;
 }
 
-const variantStyles: Record<CardProps['variant'], ViewStyle> = {
+const variantStyles: Record<NonNullable<CardProps['variant']>, ViewStyle> = {
   default: { backgroundColor: Theme.colors.surface },
   elevated: { backgroundColor: Theme.colors.surfaceElevated, ...Theme.shadows.base },
   outlined: { backgroundColor: Theme.colors.surface, borderWidth: 1, borderColor: Theme.colors.border },
 };
 
-const paddingStyles: Record<CardProps['padding'], ViewStyle> = {
+const paddingStyles: Record<NonNullable<CardProps['padding']>, ViewStyle> = {
   none: { padding: 0 },
   sm: { padding: Theme.spacing[3] },
   md: { padding: Theme.spacing[4] },
@@ -30,7 +30,7 @@ const Card = React.forwardRef<View, CardProps>(
           style={[styles.container, variantStyles[variant], paddingStyles[padding], style]}
           onPress={onPress}
           activeOpacity={0.9}
-          {...props}
+          {...(props as TouchableOpacityProps)}
         >
           {children}
         </TouchableOpacity>
@@ -50,17 +50,17 @@ const styles = StyleSheet.create({ container: { borderRadius: Theme.borderRadius
 interface CardSectionProps extends ViewProps {}
 
 export const CardHeader = React.forwardRef<View, CardSectionProps>(
-  ({ style, children, ...props }, ref) => <View ref={ref} style={[styles.header, style]} {...props}>{children}</View>
+  ({ style, children, ...props }, ref) => <View ref={ref} style={[cardStyles.header, style]} {...props}>{children}</View>
 );
 CardHeader.displayName = 'CardHeader';
 
 export const CardContent = React.forwardRef<View, CardSectionProps>(
-  ({ style, children, ...props }, ref) => <View ref={ref} style={[styles.content, style]} {...props}>{children}</View>
+  ({ style, children, ...props }, ref) => <View ref={ref} style={[cardStyles.content, style]} {...props}>{children}</View>
 );
 CardContent.displayName = 'CardContent';
 
 export const CardFooter = React.forwardRef<View, CardSectionProps>(
-  ({ style, children, ...props }, ref) => <View ref={ref} style={[styles.footer, style]} {...props}>{children}</View>
+  ({ style, children, ...props }, ref) => <View ref={ref} style={[cardStyles.footer, style]} {...props}>{children}</View>
 );
 CardFooter.displayName = 'CardFooter';
 

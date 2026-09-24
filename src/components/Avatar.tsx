@@ -11,9 +11,9 @@ interface AvatarProps extends ViewProps {
   status?: 'online' | 'offline' | 'busy' | 'away';
 }
 
-const sizeValues: Record<AvatarProps['size'], number> = { xs: 24, sm: 32, md: 40, lg: 56, xl: 72 };
-const fontSizeValues: Record<AvatarProps['size'], number> = { xs: Theme.typography.fontSize.xs, sm: Theme.typography.fontSize.sm, md: Theme.typography.fontSize.base, lg: Theme.typography.fontSize.xl, xl: Theme.typography.fontSize['2xl'] };
-const statusSizeValues: Record<AvatarProps['size'], number> = { xs: 8, sm: 10, md: 12, lg: 14, xl: 16 };
+const sizeValues: Record<NonNullable<AvatarProps['size']>, number> = { xs: 24, sm: 32, md: 40, lg: 56, xl: 72 };
+const fontSizeValues: Record<NonNullable<AvatarProps['size']>, number> = { xs: Theme.typography.fontSize.xs, sm: Theme.typography.fontSize.sm, md: Theme.typography.fontSize.base, lg: Theme.typography.fontSize.xl, xl: Theme.typography.fontSize['2xl'] };
+const statusSizeValues: Record<NonNullable<AvatarProps['size']>, number> = { xs: 8, sm: 10, md: 12, lg: 14, xl: 16 };
 
 export const Avatar = React.forwardRef<View, AvatarProps>(
   ({ source, name, size = 'md', shape = 'circle', status, style, ...props }, ref) => {

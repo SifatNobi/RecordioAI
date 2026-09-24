@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet , Alert } from 'react-native';
 import { Theme } from '@/constants/theme';
 import { H1, H2, H3, H4, Body, Caption, Overline } from '@/components/Typography';
 import { Card } from '@/components/Card';
@@ -10,6 +10,8 @@ import { useEntitlementStore } from '@/store/entitlementStore';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SubscriptionPlan } from '@/types';
+
+
 
 export default function SubscriptionScreen() {
   const { plans, currentPlanId, hasEntitlement, setCurrentPlan } = useEntitlementStore();
@@ -212,8 +214,6 @@ function PlanCard({
     </Card>
   );
 }
-
-import { Alert } from 'react-native';
 
 const styles = StyleSheet.create({
   scrollView: {

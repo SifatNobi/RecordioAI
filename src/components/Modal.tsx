@@ -27,35 +27,35 @@ interface BaseModalProps extends Omit<ModalProps, 'visible' | 'animationType' | 
   size?: 'sm' | 'md' | 'lg' | 'full'; position?: 'center' | 'bottom'; backdropOpacity?: number;
 }
 
-const sizeStyles: Record<BaseModalProps['size'], ViewStyle> = { sm: { width: '85%', maxWidth: 360 }, md: { width: '90%', maxWidth: 420 }, lg: { width: '95%', maxWidth: 520 }, full: { width: '100%', maxWidth: '100%' } };
+const sizeStyles: Record<NonNullable<BaseModalProps['size']>, ViewStyle> = { sm: { width: '85%', maxWidth: 360 }, md: { width: '90%', maxWidth: 420 }, lg: { width: '95%', maxWidth: 520 }, full: { width: '100%', maxWidth: '100%' } };
 
 export const BaseModal = React.forwardRef<View, BaseModalProps>(
   ({ visible, onClose, children, size = 'md', position = 'center', backdropOpacity = 0.7, style, ...props }, ref) => {
-    const fadeAnim = React.useRef(new Animated.Value(0));
-    const slideAnim = React.useRef(new Animated.Value(position === 'bottom' ? 100 : 0));
+    const [fadeAnim] = React.useState(() => new Animated.Value(0));
+    const [slideAnim] = React.useState(() => new Animated.Value(position === 'bottom' ? 100 : 0));
 
     React.useEffect(() => {
       if (visible) {
         Animated.parallel([
-          Animated.timing(fadeAnim.current, { toValue: 1, duration: 200, useNativeDriver: true }),
-          Animated.timing(slideAnim.current, { toValue: 0, duration: 300, useNativeDriver: true }),
+          Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+          Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
         ]).start();
       } else {
         Animated.parallel([
-          Animated.timing(fadeAnim.current, { toValue: 0, duration: 150, useNativeDriver: true }),
-          Animated.timing(slideAnim.current, { toValue: position === 'bottom' ? 100 : 0, duration: 200, useNativeDriver: true }),
+          Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+          Animated.timing(slideAnim, { toValue: position === 'bottom' ? 100 : 0, duration: 200, useNativeDriver: true }),
         ]).start();
       }
-    }, [visible, position]);
+    }, [visible, position, fadeAnim, slideAnim]);
 
-    if (!visible && fadeAnim.current._value === 0) return null;
+    if (!visible && (fadeAnim as unknown as { __getValue(): number }).__getValue() === 0) return null;
 
-    const modalStyle: ViewStyle = { ...styles.modalContainer, ...sizeStyles[size], transform: [{ translateY: slideAnim.current }] };
+    const modalStyle: ViewStyle = { ...styles.modalContainer, ...sizeStyles[size], transform: [{ translateY: slideAnim }] };
 
     return (
       <RNModal ref={ref} visible={visible} transparent animationType="none" onRequestClose={onClose} {...props}>
         <TouchableWithoutFeedback onPress={onClose} accessible={false}>
-          <Animated.View style={[styles.backdrop, { opacity: fadeAnim.current.interpolate({ inputRange: [0, 1], outputRange: [0, backdropOpacity] }) }]} />
+          <Animated.View style={[styles.backdrop, { opacity: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [0, backdropOpacity] }) }]} />
         </TouchableWithoutFeedback>
         <Animated.View style={modalStyle}><View style={styles.modalWrapper}>{children}</View></Animated.View>
       </RNModal>

@@ -125,7 +125,7 @@ export default function ConversationsScreen() {
               <View style={styles.conversationCardContent}>
                 <View style={styles.conversationDirection}>
                   <Ionicons
-                    name={conversation.direction === 'inbound' ? 'call-receive' : 'call'}
+                    name={conversation.direction === 'inbound' ? 'call' : 'call-outline'}
                     size={20}
                     color={
                       conversation.direction === 'inbound'
@@ -134,7 +134,7 @@ export default function ConversationsScreen() {
                     }
                   />
                 </View>
-                <View style={styles.conversationInfo} flex={1}>
+                <View style={[styles.conversationInfo, { flex: 1 }]}>
                   <View style={styles.conversationHeader}>
                     <H4 weight="semiBold" color="textPrimary">
                       {conversation.customer.displayName}

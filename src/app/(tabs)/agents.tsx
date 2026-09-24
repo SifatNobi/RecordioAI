@@ -85,9 +85,9 @@ export default function AgentsScreen() {
             >
               <View style={styles.agentCardContent}>
                 <View style={styles.agentIcon}>
-                  <Ionicons name="cpu" size={24} color={Theme.colors.primaryBlue} />
+                  <Ionicons name="hardware-chip" size={24} color={Theme.colors.primaryBlue} />
                 </View>
-                <View style={styles.agentInfo} flex={1}>
+                <View style={[styles.agentInfo, { flex: 1 }]}>
                   <View style={styles.agentHeader}>
                     <H3 weight="semiBold" color="textPrimary" style={styles.agentName}>
                       {agent.name}

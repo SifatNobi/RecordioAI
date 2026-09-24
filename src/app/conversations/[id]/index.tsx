@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, RefreshControl } from 'react-native';
+import { View, ScrollView, StyleSheet, RefreshControl, TextInput } from 'react-native';
 import { Theme } from '@/constants/theme';
 import { H1, H2, H3, H4, Body, Caption, Overline, Mono } from '@/components/Typography';
 import { Card, CardContent } from '@/components/Card';
@@ -15,8 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Conversation, Transcript, TranscriptSegment, SpeakerLabel, ProcessingStatus } from '@/types';
 
 export default function ConversationDetailScreen() {
-  const { params } = useLocalSearchParams();
-  const conversationId = params.id as string;
+  const { id: rawId } = useLocalSearchParams();
+  const conversationId = Array.isArray(rawId) ? rawId[0] : String(rawId ?? '');
   const { conversations, updateConversation } = useAppStore();
   const router = useRouter();
 
@@ -53,7 +53,7 @@ export default function ConversationDetailScreen() {
     partial: 'Partial',
   };
 
-  const tabs = [
+  const tabs: { id: 'overview' | 'transcript' | 'products' | 'commitments' | 'receipt' | 'evidence'; label: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
     { id: 'overview', label: 'Overview', icon: 'information-circle' },
     { id: 'transcript', label: 'Transcript', icon: 'document-text' },
     { id: 'products', label: 'Products & Prices', icon: 'pricetag' },
@@ -179,13 +179,15 @@ export default function ConversationDetailScreen() {
             Review and edit the message before sending. This will open WhatsApp externally.
           </Body>
           <View style={styles.modalInputWrapper}>
-            <textarea
+            <TextInput
               value={whatsappMessage}
               onChangeText={setWhatsAppMessage}
               style={styles.modalTextArea}
               placeholder="Type your message..."
+              placeholderTextColor={Theme.colors.textMuted}
               multiline
-              rows={6}
+              numberOfLines={6}
+              textAlignVertical="top"
             />
           </View>
           <View style={styles.modalActions}>
@@ -560,7 +562,7 @@ function CommitmentsTab({ conversation }: { conversation: Conversation }) {
           {conversation.analysis.commitments.map((commitment) => (
             <Card key={commitment.id} variant="outlined" padding="md" style={styles.commitmentCard}>
               <View style={styles.commitmentHeader}>
-                <View style={styles.commitmentInfo} flex={1}>
+                <View style={[styles.commitmentInfo, { flex: 1 }]}>
                   <Body color="textSecondary" style={styles.commitmentDesc}>
                     {commitment.description}
                   </Body>
@@ -634,7 +636,7 @@ function ReceiptTab({ conversation }: { conversation: Conversation }) {
                 receipt.verificationStatus === 'verified'
                   ? 'shield-checkmark'
                   : receipt.verificationStatus === 'failed'
-                  ? 'shield-close'
+                  ? 'shield'
                   : 'shield-half'
               }
               size={32}
@@ -796,10 +798,10 @@ function EvidenceTab({ conversation }: { conversation: Conversation }) {
 }
 
 function QualityMetric({ label, score, details }: { label: string; score: number; details?: string }) {
-  const getColor = (score: number) => {
-    if (score >= 80) return Theme.colors.success;
-    if (score >= 60) return Theme.colors.warning;
-    return Theme.colors.error;
+  const getColor = (score: number): keyof typeof Theme.colors => {
+    if (score >= 80) return 'success';
+    if (score >= 60) return 'warning';
+    return 'error';
   };
 
   return (
@@ -824,7 +826,7 @@ function ReceiptField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function EvidenceItem({ icon, label, detail }: { icon: string; label: string; detail: string }) {
+function EvidenceItem({ icon, label, detail }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; detail: string }) {
   return (
     <View style={styles.evidenceItem}>
       <Ionicons name={icon} size={20} color={Theme.colors.primaryBlue} style={styles.evidenceIcon} />

@@ -10,7 +10,10 @@ interface BadgeProps extends ViewProps {
   children: React.ReactNode;
 }
 
-const variantStyles: Record<BadgeProps['variant'], ViewStyle> = {
+type BadgeVariant = NonNullable<BadgeProps['variant']>;
+type BadgeSize = NonNullable<BadgeProps['size']>;
+
+const variantStyles: Record<BadgeVariant, ViewStyle> = {
   default: { backgroundColor: Theme.colors.surfaceElevated },
   success: { backgroundColor: 'rgba(0, 210, 106, 0.15)' },
   warning: { backgroundColor: 'rgba(245, 183, 0, 0.15)' },
@@ -19,14 +22,14 @@ const variantStyles: Record<BadgeProps['variant'], ViewStyle> = {
   processing: { backgroundColor: 'rgba(63, 231, 255, 0.15)' },
 };
 
-const variantTextColors: Record<BadgeProps['variant'], keyof typeof Theme.colors> = { default: 'textSecondary', success: 'success', warning: 'warning', error: 'error', info: 'primaryBlue', processing: 'cyanAccent' };
+const variantTextColors: Record<BadgeVariant, keyof typeof Theme.colors> = { default: 'textSecondary', success: 'success', warning: 'warning', error: 'error', info: 'primaryBlue', processing: 'cyanAccent' };
 
-const sizeStyles: Record<BadgeProps['size'], ViewStyle> = {
+const sizeStyles: Record<BadgeSize, ViewStyle> = {
   sm: { paddingHorizontal: Theme.spacing[2], paddingVertical: Theme.spacing[0.5], borderRadius: Theme.borderRadius.full },
   md: { paddingHorizontal: Theme.spacing[3], paddingVertical: Theme.spacing[1], borderRadius: Theme.borderRadius.full },
 };
 
-const sizeTextStyles: Record<BadgeProps['size'], { fontSize: number }> = { sm: { fontSize: Theme.typography.fontSize.xs }, md: { fontSize: Theme.typography.fontSize.sm } };
+const sizeTextStyles: Record<BadgeSize, { fontSize: number }> = { sm: { fontSize: Theme.typography.fontSize.xs }, md: { fontSize: Theme.typography.fontSize.sm } };
 
 export const Badge = React.forwardRef<View, BadgeProps>(
   ({ variant = 'default', size = 'md', dot = false, children, style, ...props }, ref) => {

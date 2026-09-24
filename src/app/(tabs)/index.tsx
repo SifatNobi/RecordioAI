@@ -12,6 +12,7 @@ import { useAppStore } from '@/store/appStore';
 import { useEntitlementStore } from '@/store/entitlementStore';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Conversation } from '@/types';
 
 export default function HomeScreen() {
   const { agents, conversations, activeAgentId } = useAppStore();
@@ -99,9 +100,9 @@ export default function HomeScreen() {
               >
                 <View style={styles.agentCardContent}>
                   <View style={styles.agentIcon}>
-                    <Ionicons name="cpu" size={24} color={Theme.colors.primaryBlue} />
+                    <Ionicons name="hardware-chip" size={24} color={Theme.colors.primaryBlue} />
                   </View>
-                  <View style={styles.agentInfo} flex={1}>
+                  <View style={[styles.agentInfo, { flex: 1 }]}>
                     <View style={styles.agentHeader}>
                       <H4 weight="semiBold" color="textPrimary" style={styles.agentName}>
                         {agent.name}
@@ -121,7 +122,7 @@ export default function HomeScreen() {
           <Card variant="outlined" padding="lg" style={styles.emptyAgentCard}>
             <View style={styles.emptyAgentContent}>
               <View style={styles.emptyAgentIcon}>
-                <Ionicons name="cpu-outline" size={32} color={Theme.colors.textMuted} />
+                <Ionicons name="hardware-chip-outline" size={32} color={Theme.colors.textMuted} />
               </View>
               <H3 weight="semiBold" color="textPrimary" style={styles.emptyAgentTitle}>
                 No Agents Connected
@@ -163,7 +164,7 @@ export default function HomeScreen() {
                 <View style={styles.conversationCardContent}>
                   <View style={styles.conversationDirection}>
                     <Ionicons
-                      name={conversation.direction === 'inbound' ? 'call-receive' : 'call'}
+                      name={conversation.direction === 'inbound' ? 'call' : 'call-outline'}
                       size={20}
                       color={
                         conversation.direction === 'inbound'
@@ -172,7 +173,7 @@ export default function HomeScreen() {
                       }
                     />
                   </View>
-                  <View style={styles.conversationInfo} flex={1}>
+                  <View style={[styles.conversationInfo, { flex: 1 }]}>
                     <View style={styles.conversationHeader}>
                       <H4 weight="semiBold" color="textPrimary">
                         {conversation.customer.displayName}

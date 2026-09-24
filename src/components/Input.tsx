@@ -1,5 +1,5 @@
 import React from 'react';
-import { TextInput, TextInputProps, View, ViewStyle, StyleSheet } from 'react-native';
+import { TextInput, TextInputProps, View, ViewStyle, TextStyle, StyleSheet, StyleProp } from 'react-native';
 import { Theme } from '@/constants/theme';
 import { Typography } from './Typography';
 
@@ -10,21 +10,22 @@ interface InputProps extends Omit<TextInputProps, 'style' | 'disabled'> {
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   containerStyle?: ViewStyle;
-  inputStyle?: ViewStyle;
+  inputStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
   disabled?: boolean;
 }
 
 export const Input = React.forwardRef<TextInput, InputProps>(
-  ({ label, error, helperText, leftIcon, rightIcon, containerStyle, inputStyle, disabled, ...props }, ref) => {
+  ({ label, error, helperText, leftIcon, rightIcon, containerStyle, inputStyle, style, disabled, ...props }, ref) => {
     const hasError = Boolean(error);
     const borderColor = hasError ? Theme.colors.error : disabled ? Theme.colors.border : Theme.colors.border;
 
     return (
-      <View style={[styles.container, containerStyle]}>
+      <View style={[styles.container, containerStyle, style]}>
         {label && <Typography variant="caption" weight="medium" color={hasError ? 'error' : 'textSecondary'} style={styles.label}>{label}</Typography>}
         <View style={[styles.inputWrapper, { borderColor }]}>
           {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
-          <TextInput ref={ref} style={[styles.input, { color: Theme.colors.textPrimary, paddingLeft: leftIcon ? 0 : undefined, paddingRight: rightIcon ? 0 : undefined }, inputStyle]} disabled={disabled} placeholderTextColor={Theme.colors.textMuted} {...props} />
+          <TextInput ref={ref} style={[styles.input, { color: Theme.colors.textPrimary, paddingLeft: leftIcon ? 0 : undefined, paddingRight: rightIcon ? 0 : undefined }, inputStyle]} editable={!disabled} placeholderTextColor={Theme.colors.textMuted} {...props} />
           {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
         </View>
         {(error || helperText) && <Typography variant="caption" color={error ? 'error' : 'textMuted'} style={styles.helperText}>{error || helperText}</Typography>}

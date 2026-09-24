@@ -57,7 +57,7 @@ export default function SettingsScreen() {
             </View>
             {currentPlan?.isPopular && (
               <View style={styles.popularBadge}>
-                <Caption color={Theme.colors.warning} weight="semiBold">POPULAR</Caption>
+                <Caption color="warning" weight="semiBold">POPULAR</Caption>
               </View>
             )}
           </View>

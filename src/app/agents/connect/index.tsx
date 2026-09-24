@@ -157,9 +157,9 @@ export default function ConnectAgentScreen() {
               >
                 <View style={styles.providerCardContent}>
                   <View style={styles.providerIcon}>
-                    <Ionicons name="cpu" size={28} color={Theme.colors.primaryBlue} />
+                    <Ionicons name="hardware-chip" size={28} color={Theme.colors.primaryBlue} />
                   </View>
-                  <View style={styles.providerInfo} flex={1}>
+                  <View style={[styles.providerInfo, { flex: 1 }]}>
                     <H3 weight="semiBold" color="textPrimary">{provider.name}</H3>
                     <Body color="textSecondary">{provider.description}</Body>
                     <View style={styles.providerFeatures}>
@@ -181,7 +181,7 @@ export default function ConnectAgentScreen() {
               <View style={styles.customIcon}>
                 <Ionicons name="construct" size={28} color={Theme.colors.textMuted} />
               </View>
-              <View style={styles.customInfo} flex={1}>
+              <View style={[styles.customInfo, { flex: 1 }]}>
                 <H3 weight="semiBold" color="textPrimary">Custom Integration</H3>
                 <Body color="textSecondary">Generic webhook-based integration for unsupported providers</Body>
               </View>
@@ -205,7 +205,7 @@ export default function ConnectAgentScreen() {
 
           <View style={styles.providerHeader}>
             <View style={styles.providerIcon}>
-              <Ionicons name="cpu" size={28} color={Theme.colors.primaryBlue} />
+              <Ionicons name="hardware-chip" size={28} color={Theme.colors.primaryBlue} />
             </View>
             <View style={styles.providerInfo}>
               <H2 weight="semiBold" color="textPrimary">{selectedProvider?.name}</H2>

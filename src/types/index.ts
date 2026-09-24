@@ -495,7 +495,7 @@ export interface PlanLimits {
   priceExtractions: number | 'unlimited';
   feeAnalyses: number | 'unlimited';
   evidenceReports: number | 'unlimited';
-  teamMembers?: number;
+  teamMembers?: number | 'unlimited';
   apiAccess?: boolean;
   sla?: string;
 }

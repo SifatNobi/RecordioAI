@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { Theme } from '@/constants/theme';
-import { H1, H2, H3, H4, Body, Caption, Overline } from '@/components/Typography';
+import { H1, H2, H3, Body, Caption } from '@/components/Typography';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
@@ -10,16 +10,14 @@ import { EmptyState } from '@/components/EmptyState';
 import { useAppStore } from '@/store/appStore';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { DisputeStatus } from '@/types';
+import { DisputeStatus, DisputeDetails } from '@/types';
 
 export default function ResolveScreen() {
   const { conversations } = useAppStore();
   const router = useRouter();
 
-  // In a real app, disputes would come from a separate store/API
-  const disputes = [
-    // Sample disputes would come from backend
-  ];
+  // Disputes will come from the backend API in a real integration.
+  const disputes: DisputeDetails[] = [];
 
   const handleCreateDispute = () => {
     router.push('/resolve/create');

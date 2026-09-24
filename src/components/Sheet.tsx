@@ -18,7 +18,11 @@ interface SheetProps extends ViewProps {
   hideHandle?: boolean;
 }
 
-const sizeValues: Record<SheetProps['size'], number> = { sm: 0.35, md: 0.5, lg: 0.75, full: 0.95 };
+function readAnimatedValue(value: Animated.Value): number {
+  return (value as unknown as { __getValue(): number }).__getValue();
+}
+
+const sizeValues: Record<NonNullable<SheetProps['size']>, number> = { sm: 0.35, md: 0.5, lg: 0.75, full: 0.95 };
 
 export const Sheet = React.forwardRef<View, SheetProps>(
   (
@@ -34,7 +38,7 @@ export const Sheet = React.forwardRef<View, SheetProps>(
         onStartShouldSetPanResponder: () => handleDrag,
         onMoveShouldSetPanResponder: () => handleDrag,
         onPanResponderGrant: () => {
-          translateY.setOffset(translateY.__getValue());
+          translateY.setOffset(readAnimatedValue(translateY));
           translateY.setValue(0);
         },
         onPanResponderMove: (_, gesture) => {
@@ -43,7 +47,7 @@ export const Sheet = React.forwardRef<View, SheetProps>(
         onPanResponderRelease: (_, gesture) => {
           translateY.flattenOffset();
           const velocity = gesture.vy;
-          const currentY = translateY.__getValue();
+          const currentY = readAnimatedValue(translateY);
           let targetY = 0;
           const screenHeight = 800;
           const currentPercent = (currentY / screenHeight) * 100;
@@ -71,7 +75,7 @@ export const Sheet = React.forwardRef<View, SheetProps>(
       }
     }, [visible]);
 
-    if (!visible && translateY.__getValue() === 1) return null;
+    if (!visible && readAnimatedValue(translateY) === 1) return null;
 
     const containerStyle: ViewStyle = {
       ...styles.container,

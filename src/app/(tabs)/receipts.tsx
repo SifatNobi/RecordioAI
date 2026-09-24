@@ -67,7 +67,7 @@ export default function ReceiptsScreen() {
                         receipt.verificationStatus === 'verified'
                           ? 'shield-checkmark'
                           : receipt.verificationStatus === 'failed'
-                          ? 'shield-close'
+                          ? 'shield'
                           : 'shield-half'
                       }
                       size={24}
@@ -80,7 +80,7 @@ export default function ReceiptsScreen() {
                       }
                     />
                   </View>
-                  <View style={styles.receiptInfo} flex={1}>
+                  <View style={[styles.receiptInfo, { flex: 1 }]}>
                     <View style={styles.receiptHeader}>
                       <H3 weight="semiBold" color="textPrimary">
                         {conversation.customer.displayName}
