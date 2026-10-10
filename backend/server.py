@@ -43,7 +43,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("recordio")
 
 app = FastAPI(title="RecordioAI")
-api = APIRouter(prefix="/api")
+api = APIRouter()
 
 
 # ---------------------------------------------------------------------------
@@ -559,7 +559,8 @@ async def set_tag_colors(body: TagColors, user=Depends(get_current_user)):
     return {"colors": clean}
 
 
-app.include_router(api)
+app.include_router(api, prefix="/api")
+app.include_router(api, prefix="/v1")
 
 app.add_middleware(
     CORSMiddleware,

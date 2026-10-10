@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+node_modules
+android
+release-artifacts
+*.apk
+*.aab
+__pycache__
+*.pyc

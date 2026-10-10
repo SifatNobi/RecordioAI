@@ -1,21 +1,20 @@
 services:
   - type: web
-    name: recordioai-backend
-    runtime: python-3.13
+    name: recordioai-api
+    runtime: docker
     region: oregon
     plan: starter
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.13.7
       - key: MONGO_URL
         sync: false
       - key: DB_NAME
+        value: recordioai
+      - key: GROQ_API_KEY
         sync: false
-      - key: EMERGENT_LLM_KEY
-        sync: false
-      - key: GEMINI_MODEL
-        sync: false
+      - key: GROQ_TRANSCRIPTION_MODEL
+        value: whisper-large-v3-turbo
+      - key: GROQ_CHAT_MODEL
+        value: openai/gpt-oss-20b
     autoDeploy: true
-    rootDir: backend

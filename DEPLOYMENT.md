@@ -1,0 +1,32 @@
+# Backend deployment
+
+The mobile app expects a public HTTPS backend base URL ending in `/v1`, for
+example `https://<render-service>.onrender.com/v1`. Do not put secrets in the
+mobile app or Expo environment variables.
+
+## Render
+
+1. Open [Render](https://render.com/) and sign in to the account that owns the
+   deployment.
+2. Create a Blueprint from the `SifatNobi/RecordioAI` GitHub repository and
+   branch `main`.
+3. Review the service created from [`render.yaml`](./render.yaml). The Docker
+   image is defined by [`Dockerfile`](./Dockerfile).
+4. In the service's Environment settings, set these secret values:
+   - `MONGO_URL`: the MongoDB connection string
+   - `GROQ_API_KEY`: the Groq API key
+5. Keep these non-secret values:
+   - `DB_NAME=recordioai`
+   - `GROQ_TRANSCRIPTION_MODEL=whisper-large-v3-turbo`
+   - `GROQ_CHAT_MODEL=openai/gpt-oss-20b`
+6. Deploy the service and wait for the Render deploy to finish.
+7. Verify `https://<render-service>.onrender.com/health` returns HTTP 200 and
+   reports `"status":"ok"`.
+8. Verify the API path used by the app at
+   `https://<render-service>.onrender.com/v1/`.
+9. Set `EXPO_PUBLIC_API_BASE_URL` locally to
+   `https://<render-service>.onrender.com/v1`, rebuild the Android app, and
+   confirm that the final APK contains that URL.
+
+The current `api.recordioai.com` hostname has no public DNS record, so it must
+not be used for a release until DNS and HTTPS are configured and verified.
