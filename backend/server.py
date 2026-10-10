@@ -1,3 +1,4 @@
+import asyncio
 import os
 import json
 import re
@@ -132,10 +133,18 @@ async def root():
 
 @app.get("/health")
 async def health():
+    database_ping = False
+    if db is not None:
+        try:
+            await asyncio.wait_for(client.admin.command("ping"), timeout=5)
+            database_ping = True
+        except Exception:
+            logger.exception("Database health check failed")
     return {
         "service": "RecordioAI",
-        "status": "ok",
+        "status": "ok" if database_ping else "degraded",
         "database_configured": db is not None,
+        "database_ping": database_ping,
         "ai_provider": active_ai_provider(),
     }
 

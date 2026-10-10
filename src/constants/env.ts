@@ -1,4 +1,5 @@
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://api.recordioai.com/v1';
+export const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL || 'https://recordioai.onrender.com/v1';
 
 export const ENVIRONMENT = process.env.EXPO_PUBLIC_ENVIRONMENT || 'development';
 
@@ -15,7 +16,7 @@ export const WALLETCONNECT_PROJECT_ID =
 
 export const APP_CONFIG = {
   name: 'RecordioAI',
-  version: '1.2.2',
+  version: '1.2.3',
   bundleId: 'com.recordioai.app',
   supportEmail: 'support@recordioai.com',
   privacyUrl: 'https://recordioai.com/privacy',
