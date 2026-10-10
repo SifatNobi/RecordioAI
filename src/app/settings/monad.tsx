@@ -56,6 +56,19 @@ export default function MonadProvenanceScreen() {
   const displayedConnectionState =
     !isConnected || !address || !provider ? 'disconnected' : connectionState;
 
+  const walletErrorMessage = (error: unknown): string => {
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? (error as { code?: unknown }).code
+        : undefined;
+    if (code === 4001) return 'Wallet approval was rejected. No transaction was submitted.';
+    if (code === 4902) return 'Your wallet does not support adding Monad Testnet automatically. Add chain 10143 manually, then try again.';
+    if (code === -32000) return 'The wallet rejected the transaction. Check that you have enough MON testnet funds.';
+    return error instanceof Error
+      ? error.message
+      : 'The wallet or Monad Testnet could not complete the request.';
+  };
+
   const artifactHash = useMemo(() => {
     if (!reference.trim() || !artifactText.trim()) return null;
     return hashArtifact({
@@ -63,6 +76,9 @@ export default function MonadProvenanceScreen() {
       artifact: artifactText,
     });
   }, [reference, artifactText]);
+
+  const proofMatchesArtifact =
+    proof !== null && artifactHash !== null && proof.artifactHash === artifactHash;
 
   const connectWallet = async () => {
     setConnectionState('connecting');
@@ -94,7 +110,7 @@ export default function MonadProvenanceScreen() {
       setWorkflowState('failed');
       Alert.alert(
         'Proof not submitted',
-        error instanceof Error ? error.message : 'The wallet or Monad Testnet could not complete the request.'
+        walletErrorMessage(error)
       );
     } finally {
       setBusy(false);
@@ -184,7 +200,7 @@ export default function MonadProvenanceScreen() {
       {proof ? (
         <Card variant="elevated" padding="md" style={styles.card}>
           <Caption color="success" weight="semiBold">
-            {verification ? 'MINED AND VERIFIED' : 'MINED'}
+            {verification && proofMatchesArtifact ? 'MINED AND VERIFIED' : 'MINED • VERIFY CURRENT ARTIFACT'}
           </Caption>
           <Body color="textSecondary" selectable>Transaction: {proof.transactionHash}</Body>
           <Body color="textSecondary" selectable>Block: {proof.blockNumber.toString()}</Body>
