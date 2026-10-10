@@ -16,19 +16,25 @@ from pydantic import BaseModel, Field
 import httpx
 
 from emergentintegrations_replacement import LlmChat, UserMessage, OpenAISpeechToText
+from providers import active_ai_provider, extract_with_groq, groq_enabled, transcribe_with_groq
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
+load_dotenv(ROOT_DIR.parent / ".env")
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ["DB_NAME"]]
+mongo_url = os.getenv("MONGO_URL")
+if mongo_url:
+    client = AsyncIOMotorClient(mongo_url)
+    db = client[os.getenv("DB_NAME", "recordioai")]
+else:
+    client = None
+    db = None
 
-EMERGENT_LLM_KEY = os.environ["EMERGENT_LLM_KEY"]
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
+EMERGENT_LLM_KEY = os.getenv("EMERGENT_LLM_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 
 EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 TRIAL_LIMIT = 10
@@ -92,10 +98,16 @@ class TagColors(BaseModel):
     colors: Dict[str, str] = Field(default_factory=dict)
 
 
+def _require_db() -> None:
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database is not configured. Set MONGO_URL and DB_NAME in backend/.env.")
+
+
 # ---------------------------------------------------------------------------
 # Auth helpers
 # ---------------------------------------------------------------------------
 async def get_current_user(authorization: Optional[str] = Header(default=None)):
+    _require_db()
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")
     token = authorization.split(" ", 1)[1].strip()
@@ -120,6 +132,7 @@ async def root():
 
 @api.post("/auth/session")
 async def create_session(body: SessionRequest):
+    _require_db()
     async with httpx.AsyncClient(timeout=20) as hc:
         resp = await hc.get(EMERGENT_AUTH_URL, headers={"X-Session-ID": body.session_id})
     if resp.status_code != 200:
@@ -176,6 +189,7 @@ async def logout(authorization: Optional[str] = Header(default=None)):
 # Trial
 # ---------------------------------------------------------------------------
 async def _trial_status(user_id: str):
+    _require_db()
     used = await db.records.count_documents({"user_id": user_id, "deleted_at": None})
     remaining = max(0, TRIAL_LIMIT - used)
     return {"used": used, "limit": TRIAL_LIMIT, "remaining": remaining}
@@ -202,18 +216,30 @@ async def transcribe(file: UploadFile = File(...), user=Depends(get_current_user
 
     audio_sha256 = hashlib.sha256(audio_bytes).hexdigest()
 
+    provider = "groq" if groq_enabled() else "emergent"
+    transcript = ""
     tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(audio_bytes)
-            tmp_path = tmp.name
-        stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
-        with open(tmp_path, "rb") as audio_file:
-            result = await stt.transcribe(audio_file, model="whisper-1", response_format="text")
-        transcript = result if isinstance(result, str) else getattr(result, "text", str(result))
+        if groq_enabled():
+            transcript = await transcribe_with_groq(audio_bytes, file.filename or "audio.m4a")
+        else:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(audio_bytes)
+                tmp_path = tmp.name
+            if not EMERGENT_LLM_KEY:
+                raise HTTPException(
+                    status_code=503,
+                    detail="No transcription provider is configured. Add GROQ_API_KEY or EMERGENT_LLM_KEY to backend/.env.",
+                )
+            stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
+            with open(tmp_path, "rb") as audio_file:
+                result = await stt.transcribe(audio_file, model="whisper-1", response_format="text")
+            transcript = result if isinstance(result, str) else getattr(result, "text", str(result))
         transcript = (transcript or "").strip()
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("Transcription failed: %s", str(e))
+        logger.error("Transcription failed via %s: %s", provider, str(e))
         raise HTTPException(status_code=502, detail="Transcription service failed. Please try again or paste the transcript manually.")
     finally:
         if tmp_path and os.path.exists(tmp_path):
@@ -278,6 +304,14 @@ def _parse_json_block(text: str) -> dict:
 
 
 async def _extract(transcript: str) -> Extraction:
+    if groq_enabled():
+        raw = await extract_with_groq(EXTRACTION_SYSTEM, _extraction_prompt(transcript))
+        parsed = _parse_json_block(raw)
+        return Extraction(**parsed)
+
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=503, detail="No AI extraction provider is configured. Add GROQ_API_KEY or EMERGENT_LLM_KEY to backend/.env.")
+
     chat = LlmChat(
         api_key=EMERGENT_LLM_KEY,
         session_id="recordio-extract",
