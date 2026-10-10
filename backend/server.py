@@ -99,6 +99,13 @@ class TagColors(BaseModel):
     colors: Dict[str, str] = Field(default_factory=dict)
 
 
+class AnalyzeRequest(BaseModel):
+    transcript: str
+    language: Optional[str] = "en"
+    conversationId: Optional[str] = None
+    metadata: Dict[str, object] = Field(default_factory=dict)
+
+
 def _require_db() -> None:
     if db is None:
         raise HTTPException(status_code=503, detail="Database is not configured. Set MONGO_URL and DB_NAME in backend/.env.")
@@ -339,6 +346,54 @@ async def _extract(transcript: str) -> Extraction:
     raw = await chat.send_message(UserMessage(text=_extraction_prompt(transcript)))
     parsed = _parse_json_block(raw)
     return Extraction(**parsed)
+
+
+@api.post("/analyze")
+async def analyze_transcript(body: AnalyzeRequest):
+    transcript = body.transcript.strip()
+    if not transcript:
+        raise HTTPException(status_code=422, detail="Transcript is empty.")
+    if len(transcript) > 500_000:
+        raise HTTPException(status_code=413, detail="Transcript exceeds the 500,000 character limit.")
+
+    try:
+        extraction = await _extract(transcript)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Analysis failed")
+        raise HTTPException(status_code=502, detail="AI analysis failed or returned invalid data. Please try again.")
+
+    commitments = [
+        item.model_dump()
+        for items in (
+            extraction.promises,
+            extraction.prices_or_fees,
+            extraction.dates_or_deadlines,
+            extraction.warranties_or_disclosures,
+            extraction.cancellations_or_changes,
+        )
+        for item in items
+    ]
+    model_version = os.getenv("GROQ_CHAT_MODEL", GEMINI_MODEL)
+    return {
+        "analysis": {
+            "id": f"analysis_{hashlib.sha256(transcript.encode('utf-8')).hexdigest()[:16]}",
+            "conversationId": body.conversationId or f"conv_{hashlib.sha256(transcript.encode('utf-8')).hexdigest()[:16]}",
+            "products": [],
+            "prices": [],
+            "fees": [],
+            "commitments": commitments,
+            "discrepancies": [],
+            "summary": extraction.overall_summary,
+            "keyPoints": [item["commitment"] for item in commitments if item["commitment"]],
+            "sentiment": {"overall": "neutral", "customer": "neutral", "agent": "neutral", "score": 0},
+            "language": extraction.language or body.language or "en",
+            "confidence": 0.85,
+        },
+        "provider": active_ai_provider(),
+        "modelVersion": model_version,
+    }
 
 
 # ---------------------------------------------------------------------------
