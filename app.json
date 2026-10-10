@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "RecordioAIApp",
+    "name": "RecordioAI",
     "slug": "recordioai",
-    "version": "1.1.2",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -19,8 +19,8 @@
     },
     "android": {
       "package": "com.recordioai.app",
-      "versionCode": 5,
-      "versionName": "1.1.2",
+      "versionCode": 6,
+      "versionName": "1.2.0",
       "adaptiveIcon": {
         "backgroundColor": "#000000",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -50,7 +50,7 @@
             "compileSdkVersion": 36,
             "targetSdkVersion": 36,
             "kotlinVersion": "2.1.20",
-            "newArchEnabled": false
+            "newArchEnabled": true
           }
         }
       ],

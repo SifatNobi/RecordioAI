@@ -54,6 +54,10 @@ export default function SettingsScreen() {
     router.push('/settings/subscription');
   };
 
+  const handleMonadPress = () => {
+    router.push('/settings/monad');
+  };
+
   const handleResetOnboarding = () => {
     resetOnboarding();
     router.replace('/onboarding');
@@ -69,6 +73,23 @@ export default function SettingsScreen() {
         <Body color="textSecondary" style={styles.tagline}>
           Manage your account and preferences
         </Body>
+      </View>
+
+      <View style={styles.section}>
+        <H2 weight="semiBold" color="textPrimary" style={styles.sectionTitle}>
+          Blockchain Provenance
+        </H2>
+        <Card variant="outlined" padding="md" style={styles.settingsCard}>
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <H4 weight="semiBold" color="textPrimary">Monad Testnet</H4>
+              <Caption color="textMuted">Anchor and verify artifact fingerprints</Caption>
+            </View>
+            <Button variant="outline" size="sm" onPress={handleMonadPress}>
+              Open
+            </Button>
+          </View>
+        </Card>
       </View>
 
       <View style={styles.section}>

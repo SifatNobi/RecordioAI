@@ -95,6 +95,10 @@ export default function RootLayout() {
             name="settings/subscription"
             options={{ headerShown: true, title: 'Subscription', ...NAV_HEADERS }}
           />
+          <Stack.Screen
+            name="settings/monad"
+            options={{ headerShown: true, title: 'Monad Provenance', ...NAV_HEADERS }}
+          />
         </Stack>
       </Providers>
     </SafeAreaProvider>
