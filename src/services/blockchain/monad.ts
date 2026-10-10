@@ -36,6 +36,56 @@ export interface MonadProof {
   blockNumber: bigint;
 }
 
+export interface MonadProvider {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+}
+
+export function parseChainId(value: unknown): number {
+  const text = String(value);
+  return text.toLowerCase().startsWith('0x')
+    ? Number.parseInt(text, 16)
+    : Number.parseInt(text, 10);
+}
+
+export async function ensureMonadNetwork(provider: MonadProvider): Promise<void> {
+  const chainId = parseChainId(await provider.request({ method: 'eth_chainId' }));
+  if (chainId === MONAD_TESTNET_CHAIN_ID) return;
+
+  const chainParams = {
+    chainId: `0x${MONAD_TESTNET_CHAIN_ID.toString(16)}`,
+    chainName: 'Monad Testnet',
+    nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 },
+    rpcUrls: [MONAD_TESTNET_RPC_URL],
+    blockExplorerUrls: [MONAD_EXPLORER_URL],
+  };
+
+  try {
+    await provider.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: chainParams.chainId }],
+    });
+  } catch (error) {
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? (error as { code?: unknown }).code
+        : undefined;
+    if (code !== 4902) throw error;
+    await provider.request({
+      method: 'wallet_addEthereumChain',
+      params: [chainParams],
+    });
+    await provider.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: chainParams.chainId }],
+    });
+  }
+
+  const confirmedChainId = parseChainId(await provider.request({ method: 'eth_chainId' }));
+  if (confirmedChainId !== MONAD_TESTNET_CHAIN_ID) {
+    throw new Error('Wallet is not connected to Monad Testnet (chain 10143).');
+  }
+}
+
 function canonicalize(value: unknown): string {
   if (value === null || typeof value !== 'object') {
     return JSON.stringify(value);
@@ -56,11 +106,11 @@ export function hashArtifact(artifact: unknown): Hex {
   return keccak256(stringToHex(canonicalize(artifact)));
 }
 
-function proofData(artifactHash: Hex): Hex {
+export function proofData(artifactHash: Hex): Hex {
   return `${stringToHex(`${PROOF_PREFIX}${artifactHash}`)}` as Hex;
 }
 
-function parseProofData(input: Hex): Hex | null {
+export function parseProofData(input: Hex): Hex | null {
   const prefixHex = stringToHex(PROOF_PREFIX).slice(2);
   const inputHex = input.slice(2);
   if (!inputHex.startsWith(prefixHex)) {
@@ -76,17 +126,11 @@ export async function getMonadChainId(): Promise<number> {
 }
 
 export async function submitMonadProof(
-  provider: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> },
+  provider: MonadProvider,
   address: Address,
   artifactHash: Hex
 ): Promise<MonadProof> {
-  const chainId = await provider.request({ method: 'eth_chainId' });
-  if (Number.parseInt(String(chainId), 16) !== MONAD_TESTNET_CHAIN_ID) {
-    await provider.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: `0x${MONAD_TESTNET_CHAIN_ID.toString(16)}` }],
-    });
-  }
+  await ensureMonadNetwork(provider);
 
   const transactionHash = (await provider.request({
     method: 'eth_sendTransaction',
@@ -99,6 +143,9 @@ export async function submitMonadProof(
       },
     ],
   })) as Hex;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(transactionHash)) {
+    throw new Error('Wallet returned an invalid Monad transaction hash.');
+  }
 
   const receipt = await publicClient.waitForTransactionReceipt({
     hash: transactionHash,
