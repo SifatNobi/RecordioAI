@@ -2,7 +2,7 @@
   "expo": {
     "name": "RecordioAI",
     "slug": "recordioai",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -19,8 +19,8 @@
     },
     "android": {
       "package": "com.recordioai.app",
-      "versionCode": 7,
-      "versionName": "1.2.1",
+      "versionCode": 8,
+      "versionName": "1.2.2",
       "adaptiveIcon": {
         "backgroundColor": "#000000",
         "foregroundImage": "./assets/android-icon-foreground.png",

@@ -130,6 +130,16 @@ async def root():
     return {"service": "RecordioAI", "status": "ok"}
 
 
+@app.get("/health")
+async def health():
+    return {
+        "service": "RecordioAI",
+        "status": "ok",
+        "database_configured": db is not None,
+        "ai_provider": active_ai_provider(),
+    }
+
+
 @api.post("/auth/session")
 async def create_session(body: SessionRequest):
     _require_db()
@@ -562,6 +572,8 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def _startup():
+    if db is None:
+        return
     await db.users.create_index("email", unique=True)
     await db.users.create_index("user_id", unique=True)
     await db.user_sessions.create_index("session_token", unique=True)
