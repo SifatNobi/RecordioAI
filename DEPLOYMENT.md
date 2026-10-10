@@ -24,7 +24,11 @@ mobile app or Expo environment variables.
    reports `"status":"ok"`.
 8. Verify the API path used by the app at
    `https://<render-service>.onrender.com/v1/`.
-9. Set `EXPO_PUBLIC_API_BASE_URL` locally to
+9. Verify the unauthenticated transcription contract with a safe audio sample:
+   `POST /v1/transcribe` with a multipart field named `file`. Transcription uses
+   the server-side Groq key; it does not accept or require a Groq key in the
+   mobile app. Record-management endpoints remain session-authenticated.
+10. Set `EXPO_PUBLIC_API_BASE_URL` locally to
    `https://<render-service>.onrender.com/v1`, rebuild the Android app, and
    confirm that the final APK contains that URL.
 

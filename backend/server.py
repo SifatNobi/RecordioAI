@@ -230,7 +230,7 @@ async def trial(user=Depends(get_current_user)):
 # Transcription
 # ---------------------------------------------------------------------------
 @api.post("/transcribe")
-async def transcribe(file: UploadFile = File(...), user=Depends(get_current_user)):
+async def transcribe(file: UploadFile = File(...)):
     suffix = Path(file.filename or "audio.m4a").suffix.lower() or ".m4a"
     if suffix.lstrip(".") not in {"mp3", "mp4", "mpeg", "mpga", "m4a", "wav", "webm"}:
         raise HTTPException(status_code=415, detail="Unsupported audio format")
@@ -274,7 +274,11 @@ async def transcribe(file: UploadFile = File(...), user=Depends(get_current_user
     if not transcript:
         raise HTTPException(status_code=422, detail="No speech detected in the recording.")
 
-    return {"transcript": transcript, "audio_sha256": audio_sha256}
+    return {
+        "transcript": transcript,
+        "audio_sha256": audio_sha256,
+        "provider": provider,
+    }
 
 
 # ---------------------------------------------------------------------------

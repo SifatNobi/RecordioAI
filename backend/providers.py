@@ -5,6 +5,7 @@ import os
 from typing import Any, Optional
 
 from openai import OpenAI
+from openai import AuthenticationError, APIStatusError
 
 
 DEFAULT_GROQ_TRANSCRIPTION_MODEL = "whisper-large-v3-turbo"
@@ -48,7 +49,12 @@ async def transcribe_with_groq(audio_bytes: bytes, filename: str = "audio.m4a") 
             response_format="text",
         )
 
-    result = await asyncio.get_running_loop().run_in_executor(None, _call)
+    try:
+        result = await asyncio.get_running_loop().run_in_executor(None, _call)
+    except AuthenticationError as exc:
+        raise RuntimeError("Groq rejected the server API key.") from exc
+    except APIStatusError as exc:
+        raise RuntimeError(f"Groq transcription request failed with status {exc.status_code}.") from exc
     if isinstance(result, str):
         return result.strip()
     if hasattr(result, "text"):
