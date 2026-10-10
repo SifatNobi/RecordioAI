@@ -6,7 +6,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Providers } from '@/components/Providers';
 import { useAppStore } from '@/store/appStore';
 import { useEntitlementStore } from '@/store/entitlementStore';
-import { useRevenueCatStore } from '@/store/revenuecatStore';
 import { Theme } from '@/constants/theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -41,15 +40,13 @@ export default function RootLayout() {
   React.useEffect(() => {
     let active = true;
 
-    // Optional store initialization is deferred off the critical path and
-    // isolated so a failure can never block first paint. RevenueCat is
-    // configured exactly once here (idempotent across reloads).
+    // Optional store initialization is deferred off the critical path so a
+    // failure can never block first paint.
     Promise.resolve()
       .then(() => {
         if (!active) return;
         initializeStores();
         initializeEntitlements();
-        useRevenueCatStore.getState().initialize();
       })
       .catch(() => {});
 

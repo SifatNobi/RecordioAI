@@ -1,12 +1,5 @@
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://api.recordioai.com/v1';
 
-// Public RevenueCat Test Store SDK key for the RecordioAIApp project. Configured
-// via EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY where available, falling back to the
-// Test Store key when no environment file is present (e.g. bare gradle builds).
-export const REVENUECAT_ANDROID_API_KEY =
-  process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY ||
-  'test_IyTfDNFLsfmyGoszQxhqoIliFsV';
-
 export const ENVIRONMENT = process.env.EXPO_PUBLIC_ENVIRONMENT || 'development';
 
 export const IS_DEV = ENVIRONMENT === 'development';

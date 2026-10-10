@@ -1,134 +1,33 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Theme } from '@/constants/theme';
 import { H1, H2, H3, Body, Caption } from '@/components/Typography';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
-import { Badge } from '@/components/Badge';
-import { LoadingState } from '@/components/LoadingState';
-import { ErrorState } from '@/components/ErrorState';
 import { useEntitlementStore } from '@/store/entitlementStore';
-import { useRevenueCatStore } from '@/store/revenuecatStore';
 import { Ionicons } from '@expo/vector-icons';
 import { SubscriptionPlan } from '@/types';
 
 export default function SubscriptionScreen() {
   const { plans, currentPlanId } = useEntitlementStore();
-  const {
-    status,
-    offeringsLoading,
-    offeringsError,
-    priceByPlan,
-    packageByPlan,
-    purchasingPlanId,
-    purchaseError,
-    restoring,
-    initialize,
-    loadOfferings,
-    purchase,
-    restore,
-    clearRestoreMessage,
-  } = useRevenueCatStore();
 
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
-  const [showTrialModal, setShowTrialModal] = useState(false);
-
   const currentPlan = plans.find((p) => p.id === currentPlanId);
-  const hasLoadedOfferings = Object.keys(packageByPlan).length > 0;
-  const isProcessing = purchasingPlanId !== null || restoring;
 
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
-
-  const handlePlanSelect = async (plan: SubscriptionPlan) => {
-    if (isProcessing) return;
-
+  const handlePlanSelect = (plan: SubscriptionPlan) => {
     if (plan.isEnterprise) {
       Alert.alert('Enterprise', 'Contact sales for custom pricing', [{ text: 'OK' }]);
       return;
     }
 
     if (plan.id === 'trial') {
-      setShowTrialModal(true);
       return;
     }
 
-    await handleSubscribe(plan);
-  };
-
-  const handleSubscribe = async (plan: SubscriptionPlan) => {
-    if (purchasingPlanId) return;
-
-    if (plan.id !== selectedPlan?.id) {
-      setSelectedPlan(plan);
-      return;
-    }
-
-    const customerInfo = await purchase(plan.id);
-
-    if (customerInfo) {
-      const activePlanId = useRevenueCatStore.getState().currentPlanId;
-      const activePlan = plans.find((p) => p.id === activePlanId);
-      Alert.alert(
-        'Purchase Successful',
-        `You now have access to ${activePlan?.name ?? plan.name}.`,
-        [{ text: 'OK' }]
-      );
-    } else {
-      const message = useRevenueCatStore.getState().purchaseError;
-      Alert.alert(
-        'Purchase Not Completed',
-        message || 'The purchase could not be completed. Please try again.',
-        [{ text: 'OK' }]
-      );
-    }
-  };
-
-  const handleRestore = async () => {
-    if (restoring) return;
-
-    await restore();
-    const message = useRevenueCatStore.getState().restoreMessage;
-    clearRestoreMessage();
-
-    const title =
-      message?.kind === 'success'
-        ? 'Purchases Restored'
-        : message?.kind === 'error'
-          ? 'Restore Failed'
-          : 'No Purchases Found';
-    Alert.alert(title, message?.text ?? 'No previous purchases were found.', [
-      { text: 'OK' },
-    ]);
-  };
-
-  const handleStartTrial = () => {
-    setShowTrialModal(false);
+    setSelectedPlan(plan);
   };
 
   const renderPlansSection = () => {
-    if (offeringsError) {
-      return (
-        <ErrorState
-          title="Plans Unavailable"
-          message={offeringsError}
-          onRetry={loadOfferings}
-          showRetry
-          style={styles.stateBlock}
-        />
-      );
-    }
-
-    if (status === 'uninitialized' || (offeringsLoading && !hasLoadedOfferings)) {
-      return (
-        <LoadingState
-          label="Loading plans from RevenueCat…"
-          style={styles.stateBlock}
-        />
-      );
-    }
-
     return (
       <View style={styles.plansGrid}>
         {plans
@@ -136,7 +35,6 @@ export default function SubscriptionScreen() {
           .map((plan) => {
             const isCurrent = plan.id === currentPlanId;
             const isSelected = selectedPlan?.id === plan.id;
-            const isPurchasing = purchasingPlanId === plan.id;
 
             return (
               <PlanCard
@@ -144,9 +42,7 @@ export default function SubscriptionScreen() {
                 plan={plan}
                 isCurrent={isCurrent}
                 isSelected={isSelected}
-                isPurchasing={isPurchasing}
-                disabled={isProcessing}
-                displayPrice={priceByPlan[plan.id]}
+                displayPrice={undefined}
                 onPress={() => handlePlanSelect(plan)}
               />
             );
@@ -179,7 +75,7 @@ export default function SubscriptionScreen() {
               <Body color="textSecondary">
                 {currentPlan.price === 0
                   ? 'Free'
-                  : `${priceByPlan[currentPlan.id] ?? `$${currentPlan.price.toFixed(2)}`}/month`}
+                  : `$${currentPlan.price.toFixed(2)}/month`}
               </Body>
             </View>
           </View>
@@ -218,22 +114,9 @@ export default function SubscriptionScreen() {
       </View>
 
       <View style={styles.actions}>
-        {purchaseError !== null && (
-          <Caption color="error" style={styles.stateMessage}>
-            {purchaseError}
-          </Caption>
-        )}
-        <Button
-          variant="ghost"
-          fullWidth
-          onPress={handleRestore}
-          loading={restoring}
-          disabled={isProcessing}
-          style={styles.restoreButton}
-        >
-          <Ionicons name="refresh" size={18} style={{ marginRight: 8 }} />
-          Restore Purchases
-        </Button>
+        <Caption color="textMuted" style={styles.stateMessage}>
+          In-app billing is not configured in this build. Select a plan to review its features.
+        </Caption>
       </View>
 
       <View style={styles.bottomSpacer} />
@@ -245,16 +128,12 @@ function PlanCard({
   plan,
   isCurrent,
   isSelected,
-  isPurchasing,
-  disabled,
   displayPrice,
   onPress,
 }: {
   plan: SubscriptionPlan;
   isCurrent: boolean;
   isSelected: boolean;
-  isPurchasing: boolean;
-  disabled: boolean;
   displayPrice?: string;
   onPress: () => void;
 }) {
@@ -310,15 +189,11 @@ function PlanCard({
         fullWidth
         style={styles.planCardButton}
         onPress={onPress}
-        loading={isPurchasing}
-        disabled={disabled && !isPurchasing}
       >
         {isCurrent
           ? 'Current Plan'
           : isSelected
-            ? isPurchasing
-              ? 'Processing…'
-              : 'Subscribe'
+            ? 'Selected'
             : 'Select'}
       </Button>
     </Card>

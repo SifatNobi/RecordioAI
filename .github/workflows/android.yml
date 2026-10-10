@@ -41,7 +41,7 @@ jobs:
         run: npx expo lint
 
   build-android:
-    name: Build Android Test APK (debug + Test Store)
+    name: Build Android Test APK
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 240
@@ -82,15 +82,12 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL /usr/local/lib/node_modules
           df -h "$HOME"
-          # Do NOT touch gradle.properties: no reactNativeArchitectures pin is applied here.
-          # The generated android/gradle.properties uses the Gradle default, so the debug APK
-          # bundles ALL technically supported ABIs (arm64-v8a, armeabi-v7a, x86_64, x86) as a
-          # single directly-installable UNIVERSAL APK (works on real phones AND emulators).
+          # The release artifact targets arm64-v8a for the initial Android distribution.
 
-      - name: Build Android Test APK (debug, universal ABIs) - ONCE
+      - name: Build Android Test APK (arm64-v8a)
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon --console=plain --stacktrace
+          ./gradlew assembleDebug -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain --stacktrace
 
       - name: Validate the exact built APK (read-only, no rebuild)
         run: |
@@ -112,24 +109,18 @@ jobs:
             echo "::error::assets/index.android.bundle missing or production URL absent"; exit 1
           fi
 
-          # 3. Package, version, and UNIVERSAL ABI contents from the exact APK
+          # 3. Package, version, and ARM64 ABI contents from the exact APK
           AAPT2=$(ls -1 $ANDROID_HOME/build-tools/*/aapt2 | tail -1)
           BADGING=$($AAPT2 dump badging "$APK")
           echo "package: $(echo "$BADGING" | grep -m1 "^package:")"
 
-          # All technically supported ABIs must be present (distribute a universal APK, never
-          # an ARM-only or abi-split artifact).
-          for abi in arm64-v8a armeabi-v7a x86_64 x86; do
-            grep -q "native-code:.*'$abi'" <<< "$BADGING" || { echo "::error::ABI $abi missing from APK"; exit 1; }
-          done
-          echo "Verified: universal APK contains arm64-v8a armeabi-v7a x86_64 x86"
+          grep -q "native-code:.*'arm64-v8a'" <<< "$BADGING" || { echo "::error::ABI arm64-v8a missing from APK"; exit 1; }
+          echo "Verified: arm64-v8a is present"
 
           # Native libraries actually packaged per ABI (including the arch-specific
           # libreactnative.so) - guards against a lib-less "universal" placeholder.
-          for abi in arm64-v8a armeabi-v7a x86_64 x86; do
-            unzip -l "$APK" | grep -q "lib/$abi/libreactnative.so" || { echo "::error::lib/$abi/libreactnative.so missing"; exit 1; }
-          done
-          echo "Verified: libreactnative.so present in all 4 ABIs"
+          unzip -l "$APK" | grep -q "lib/arm64-v8a/libreactnative.so" || { echo "::error::lib/arm64-v8a/libreactnative.so missing"; exit 1; }
+          echo "Verified: libreactnative.so present for arm64-v8a"
 
           # 4. Launcher icon resources are packaged (adaptive icon on v26+, density fallbacks)
           unzip -l "$APK" | grep -q 'res/mipmap-anydpi-v26/ic_launcher.xml' || { echo "::error::adaptive ic_launcher missing"; exit 1; }
@@ -167,8 +158,6 @@ jobs:
             3. Open the APK to install
 
             ### Notes
-            This is a DEBUG/Test Store build using the RevenueCat **Test Store** API key
-            (`test_*`). Test purchases are simulated and generate no revenue.
             The APK is self-contained (no Metro / localhost connection required).
           draft: false
           prerelease: false
