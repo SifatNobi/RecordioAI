@@ -619,6 +619,7 @@ async def submit_provenance(body: ProvenanceSubmitRequest, user=Depends(get_prov
                     "status": "verified",
                     "transaction_hash": raw_hash,
                     "chain_id": chain_id,
+                    "error": None,
                     "block_number": int(existing_receipt["blockNumber"], 16),
                     "explorer_url": f"https://testnet.monadexplorer.com/tx/{raw_hash}",
                 }
