@@ -4,10 +4,15 @@ import { useAppStore } from '@/store/appStore';
 import { useRouter } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
 import { Theme } from '@/constants/theme';
+import { recordStartupStage } from '@/services/startupDiagnostics';
 
 export default function Index() {
   const { onboarding, hasHydrated } = useAppStore();
   const router = useRouter();
+
+  useEffect(() => {
+    recordStartupStage('first-screen-rendered');
+  }, []);
 
   useEffect(() => {
     if (!hasHydrated) return;

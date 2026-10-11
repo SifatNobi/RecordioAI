@@ -7,11 +7,12 @@ import { Providers } from '@/components/Providers';
 import { useAppStore } from '@/store/appStore';
 import { useEntitlementStore } from '@/store/entitlementStore';
 import { Theme } from '@/constants/theme';
-import { retryPendingProvenance } from '@/services/blockchain/automaticProvenance';
+import { recordStartupStage } from '@/services/startupDiagnostics';
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   // Keep the app usable if the splash API is unavailable.
 });
+recordStartupStage('root-layout-evaluated');
 
 const { backgroundPrimary, textPrimary } = Theme.colors;
 
@@ -40,6 +41,7 @@ export default function RootLayout() {
   useIoniconsFont();
 
   React.useEffect(() => {
+    recordStartupStage('providers-mounted');
     let active = true;
 
     initializeStores();
@@ -55,7 +57,16 @@ export default function RootLayout() {
     // Recovery is best effort and must never delay navigation or splash
     // dismissal.
     const recoveryTimeout = setTimeout(() => {
-      if (active) void Promise.resolve().then(retryPendingProvenance).catch(() => {});
+      if (!active) return;
+      void import('@/services/blockchain/automaticProvenance')
+        .then(({ retryPendingProvenance }) => retryPendingProvenance())
+        .catch((error) => {
+          console.error(
+            `[startup] provenance recovery unavailable: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        });
     }, 1500);
 
     return () => {
@@ -69,7 +80,9 @@ export default function RootLayout() {
     // The router and its first route are now mounted. Icon fonts are
     // non-critical and must not be able to hold the native splash forever.
     const frame = requestAnimationFrame(() => {
+      recordStartupStage('navigation-mounted');
       void SplashScreen.hideAsync().catch(() => {});
+      recordStartupStage('splash-dismissed');
     });
     return () => cancelAnimationFrame(frame);
   }, []);

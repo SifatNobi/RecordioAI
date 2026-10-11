@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Theme } from '@/constants/theme';
-import { WalletConnectModal } from '@walletconnect/modal-react-native';
+import { recordStartupStage } from '@/services/startupDiagnostics';
 import {
   MONAD_TESTNET_CHAIN_ID,
   MONAD_TESTNET_RPC_URL,
@@ -14,18 +14,40 @@ interface ProvidersProps {
 }
 
 export function Providers({ children }: ProvidersProps) {
-  const [walletConnectReady, setWalletConnectReady] = React.useState(false);
+  const [WalletConnectModal, setWalletConnectModal] =
+    React.useState<React.ComponentType<any> | null>(null);
 
   React.useEffect(() => {
-    const timeoutId = setTimeout(() => setWalletConnectReady(true), 500);
-    return () => clearTimeout(timeoutId);
+    recordStartupStage('providers-mounted');
+    let active = true;
+    const timeoutId = setTimeout(() => {
+      void Promise.resolve()
+        .then(() => {
+          require('@walletconnect/react-native-compat');
+          return require('@walletconnect/modal-react-native');
+        })
+        .then((module) => {
+          if (active) setWalletConnectModal(() => module.WalletConnectModal);
+        })
+        .catch((error) => {
+          console.error(
+            `[startup] optional WalletConnect unavailable: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        });
+    }, 2000);
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   return (
     <GestureHandlerRootView style={styles.container}>
       <View style={styles.container}>
         {children}
-        {walletConnectReady && WALLETCONNECT_PROJECT_ID ? (
+        {WalletConnectModal && WALLETCONNECT_PROJECT_ID ? (
           <WalletConnectModal
             projectId={WALLETCONNECT_PROJECT_ID}
             sessionParams={{

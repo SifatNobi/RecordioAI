@@ -1,3 +1,2 @@
-// Root component for Metro. The app is launched via expo-router/entry
-// (see package.json "main"), which renders the root layout from src/app.
+// Legacy entry retained for tooling that still resolves App.tsx directly.
 import 'expo-router/entry';
