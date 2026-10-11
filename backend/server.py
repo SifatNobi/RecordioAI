@@ -5,6 +5,7 @@ import re
 import hashlib
 import logging
 import tempfile
+import secrets
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict
@@ -53,6 +54,11 @@ api = APIRouter()
 # ---------------------------------------------------------------------------
 class SessionRequest(BaseModel):
     session_id: str
+
+
+class DeviceSessionRequest(BaseModel):
+    device_id: str = Field(min_length=16, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$")
+    app_version: Optional[str] = Field(default="", max_length=32)
 
 
 class Commitment(BaseModel):
@@ -125,7 +131,11 @@ async def get_current_user(authorization: Optional[str] = Header(default=None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")
     token = authorization.split(" ", 1)[1].strip()
-    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    session = await db.user_sessions.find_one(
+        {"$or": [{"session_token": token}, {"session_token_hash": token_hash}]},
+        {"_id": 0},
+    )
     if not session:
         raise HTTPException(status_code=401, detail="Invalid session")
     expires_at = session["expires_at"]
@@ -137,6 +147,31 @@ async def get_current_user(authorization: Optional[str] = Header(default=None)):
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     return user
+
+
+async def get_provenance_user(authorization: Optional[str] = Header(default=None)):
+    _require_db()
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    token = authorization.split(" ", 1)[1].strip()
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    device_session = await db.device_sessions.find_one(
+        {"token_hash": token_hash, "revoked_at": None},
+        {"_id": 0},
+    )
+    if device_session:
+        expires_at = device_session["expires_at"]
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc):
+            raise HTTPException(status_code=401, detail="Session expired")
+        return {
+            "user_id": f"device_{device_session['device_id']}",
+            "device_id": device_session["device_id"],
+            "name": "RecordioAI device",
+            "email": "",
+        }
+    return await get_current_user(authorization)
 
 
 @api.get("/")
@@ -201,6 +236,52 @@ async def create_session(body: SessionRequest):
     return {
         "session_token": session_token,
         "user": {"user_id": user_id, "email": email, "name": name, "picture": picture},
+    }
+
+
+@api.post("/auth/device")
+async def create_device_session(body: DeviceSessionRequest):
+    _require_db()
+    now = datetime.now(timezone.utc)
+    existing = await db.device_sessions.find_one(
+        {"device_id": body.device_id, "revoked_at": None},
+        {"_id": 0},
+    )
+    if existing and existing.get("expires_at", now) > now:
+        token = secrets.token_urlsafe(48)
+        await db.device_sessions.update_one(
+            {"device_id": body.device_id},
+            {"$set": {
+                "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+                "last_seen_at": now,
+                "app_version": body.app_version,
+            }},
+        )
+        return {
+            "session_token": token,
+            "device_id": body.device_id,
+            "expires_at": existing["expires_at"].isoformat(),
+        }
+
+    token = secrets.token_urlsafe(48)
+    expires_at = now + timedelta(days=30)
+    await db.device_sessions.update_one(
+        {"device_id": body.device_id},
+        {"$set": {
+            "device_id": body.device_id,
+            "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+            "created_at": now,
+            "last_seen_at": now,
+            "expires_at": expires_at,
+            "revoked_at": None,
+            "app_version": body.app_version,
+        }},
+        upsert=True,
+    )
+    return {
+        "session_token": token,
+        "device_id": body.device_id,
+        "expires_at": expires_at.isoformat(),
     }
 
 
@@ -436,13 +517,19 @@ async def _rpc_call(method: str, params: list) -> object:
 
 
 @api.post("/provenance/submit")
-async def submit_provenance(body: ProvenanceSubmitRequest, user=Depends(get_current_user)):
+async def submit_provenance(body: ProvenanceSubmitRequest, user=Depends(get_provenance_user)):
     private_key = _relayer_key()
     if not private_key:
         raise HTTPException(
             status_code=503,
             detail="Automatic provenance relayer is not configured. Connect a wallet from the Monad Provenance screen.",
         )
+    recent_count = await db.provenance_proofs.count_documents({
+        "user_id": user["user_id"],
+        "created_at": {"$gte": datetime.now(timezone.utc) - timedelta(hours=1)},
+    })
+    if recent_count >= 20:
+        raise HTTPException(status_code=429, detail="Provenance submission rate limit reached. Try again later.")
     try:
         account = Account.from_key(private_key)
     except Exception as exc:
@@ -493,6 +580,7 @@ async def submit_provenance(body: ProvenanceSubmitRequest, user=Depends(get_curr
                 "chain_id": chain_id,
                 "block_number": int(receipt["blockNumber"], 16),
                 "explorer_url": f"https://testnet.monadexplorer.com/tx/{raw_hash}",
+                "created_at": datetime.now(timezone.utc),
             }
             await db.provenance_proofs.update_one(
                 {"user_id": user["user_id"], "idempotency_key": body.idempotency_key},
@@ -751,6 +839,8 @@ async def _startup():
     await db.users.create_index("email", unique=True)
     await db.users.create_index("user_id", unique=True)
     await db.user_sessions.create_index("session_token", unique=True)
+    await db.device_sessions.create_index("device_id", unique=True)
+    await db.device_sessions.create_index("token_hash", unique=True)
     await db.records.create_index("user_id")
     await db.records.create_index("record_id", unique=True)
 

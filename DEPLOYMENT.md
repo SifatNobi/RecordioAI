@@ -43,14 +43,14 @@ that fingerprint in the calldata of a zero-value self-transaction on Monad
 Testnet. The app waits for a successful receipt and re-reads the transaction
 calldata before showing the proof as verified.
 
-The current deployment has no server-side relayer or signing key. When an
-existing WalletConnect session is connected, finalized conversations
-automatically attempt submission after analysis. Without a connected wallet,
-the conversation remains pending and can be retried from the Monad Provenance
-screen. A relayer must not be added without a dedicated server-side signer,
-request validation, rate limits, and restricted transaction construction.
+The app now requests a scoped device session over HTTPS and stores the returned
+token only in Android SecureStore. The token is accepted only by the
+provenance relayer endpoint; it cannot access user records or account routes.
+After a finalized recording is saved, the conversation screen automatically
+tries the relayer. WalletConnect remains an optional fallback for manual
+submission.
 
-An optional authenticated relayer endpoint is implemented at
+The authenticated relayer endpoint is implemented at
 `POST /v1/provenance/submit`. It remains unavailable until these Render
 environment variables are configured:
 
@@ -58,10 +58,10 @@ environment variables are configured:
 - `MONAD_RELAYER_RPC_URL`: optional; defaults to
   `https://testnet-rpc.monad.xyz`.
 
-The endpoint requires an existing RecordioAI bearer session, accepts only a
+The endpoint accepts either an existing RecordioAI bearer session or the
+scoped device session created by `POST /v1/auth/device`, accepts only a
 32-byte artifact hash and an idempotency key, signs only a zero-value
-self-transaction to the relayer address, verifies the receipt and calldata,
-and never returns the private key. The current root mobile app has no
-authenticated session flow, so it must continue using WalletConnect until that
-account-auth flow is enabled. Never embed a relayer key or static relayer
-token in the APK.
+self-transaction to the relayer address, applies a per-device/user hourly
+limit, verifies the receipt and calldata, and never returns the private key.
+Device sessions expire after 30 days and can be revoked server-side by setting
+`revoked_at`. Never embed a relayer key or static privileged token in the APK.

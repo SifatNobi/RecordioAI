@@ -17,4 +17,8 @@ services:
         value: whisper-large-v3-turbo
       - key: GROQ_CHAT_MODEL
         value: openai/gpt-oss-20b
+      - key: PROVENANCE_RELAYER_PRIVATE_KEY
+        sync: false
+      - key: MONAD_RELAYER_RPC_URL
+        value: https://testnet-rpc.monad.xyz
     autoDeploy: true

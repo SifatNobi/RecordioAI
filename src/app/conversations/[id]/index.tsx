@@ -16,6 +16,7 @@ import { Conversation, Transcript, TranscriptSegment, SpeakerLabel, ProcessingSt
 import { useWalletConnectModal } from '@walletconnect/modal-react-native';
 import { isAddress, type Hex } from 'viem';
 import { hashConversationArtifact, submitMonadProof, verifyMonadProof } from '@/services/blockchain/monad';
+import { submitProvenanceViaRelayer } from '@/services/blockchain/relayer';
 import * as Clipboard from 'expo-clipboard';
 
 export default function ConversationDetailScreen() {
@@ -23,7 +24,7 @@ export default function ConversationDetailScreen() {
   const conversationId = Array.isArray(rawId) ? rawId[0] : String(rawId ?? '');
   const { conversations, updateConversation } = useAppStore();
   const router = useRouter();
-  const { provider, address, isConnected } = useWalletConnectModal();
+  const { provider, address } = useWalletConnectModal();
   const provenanceAttemptRef = useRef<string | null>(null);
 
   const conversation = conversations.find((c) => c.id === conversationId);
@@ -38,10 +39,6 @@ export default function ConversationDetailScreen() {
       !conversation ||
       !provenance ||
       !['pending', 'submitting'].includes(provenance.status) ||
-      !isConnected ||
-      !provider ||
-      !address ||
-      !isAddress(address) ||
       provenanceAttemptRef.current === conversation.id
     ) {
       return;
@@ -56,30 +53,54 @@ export default function ConversationDetailScreen() {
     };
     updateConversation(conversation.id, { provenance: submitting });
 
-    submitMonadProof(provider, address, provenance.artifactHash as Hex)
-      .then((proof) => {
+    const submitAutomaticProof = async () => {
+      try {
+        const proof = await submitProvenanceViaRelayer(
+          provenance.artifactHash as Hex,
+          `conversation:${conversation.id}`
+        );
         updateConversation(conversation.id, {
           provenance: {
             ...submitting,
             status: 'verified',
-            transactionHash: proof.transactionHash,
-            explorerUrl: proof.explorerUrl,
-            blockNumber: proof.blockNumber.toString(),
+            transactionHash: proof.transaction_hash,
+            explorerUrl: proof.explorer_url,
+            blockNumber: proof.block_number.toString(),
             updatedAt: new Date().toISOString(),
           },
         });
-      })
-      .catch((error) => {
+        return;
+      } catch (relayerError) {
+        if (provider && address && isAddress(address)) {
+          try {
+            const proof = await submitMonadProof(provider, address, provenance.artifactHash as Hex);
+            updateConversation(conversation.id, {
+              provenance: {
+                ...submitting,
+                status: 'verified',
+                transactionHash: proof.transactionHash,
+                explorerUrl: proof.explorerUrl,
+                blockNumber: proof.blockNumber.toString(),
+                updatedAt: new Date().toISOString(),
+              },
+            });
+            return;
+          } catch (walletError) {
+            relayerError = walletError;
+          }
+        }
         updateConversation(conversation.id, {
           provenance: {
             ...submitting,
             status: 'failed',
-            error: error instanceof Error ? error.message : 'Monad proof submission failed.',
+            error: relayerError instanceof Error ? relayerError.message : 'Monad proof submission failed.',
             updatedAt: new Date().toISOString(),
           },
         });
-      });
-  }, [address, conversation, isConnected, provider, updateConversation]);
+      }
+    };
+    void submitAutomaticProof();
+  }, [address, conversation, provider, updateConversation]);
 
   if (!conversation) {
     return (

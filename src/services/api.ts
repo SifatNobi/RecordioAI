@@ -27,14 +27,14 @@ async function request<T>(
   });
 
   if (!response.ok) {
-    let errorData: { message?: string; code?: string; details?: unknown } = {};
+    let errorData: { message?: string; detail?: string; code?: string; details?: unknown } = {};
     try {
       errorData = await response.json();
     } catch {
       // Ignore JSON parse errors
     }
     throw new ApiError(
-      errorData.message || `Request failed with status ${response.status}`,
+      errorData.message || errorData.detail || `Request failed with status ${response.status}`,
       response.status,
       errorData.code,
       errorData.details
