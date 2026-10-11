@@ -165,7 +165,11 @@ async def get_provenance_user(authorization: Optional[str] = Header(default=None
             expires_at = expires_at.replace(tzinfo=timezone.utc)
         if expires_at < datetime.now(timezone.utc):
             raise HTTPException(status_code=401, detail="Session expired")
-        relayer = await _relayer_health()
+        try:
+            relayer = await _relayer_health()
+        except Exception:
+            logger.exception("Relayer health check failed")
+            relayer = {"configured": False, "error": "relayer health check failed"}
         return {
             "user_id": f"device_{device_session['device_id']}",
             "device_id": device_session["device_id"],
