@@ -7,6 +7,7 @@ import { Providers } from '@/components/Providers';
 import { useAppStore } from '@/store/appStore';
 import { useEntitlementStore } from '@/store/entitlementStore';
 import { Theme } from '@/constants/theme';
+import { retryPendingProvenance } from '@/services/blockchain/automaticProvenance';
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   // Keep the app usable if the splash API is unavailable.
@@ -48,6 +49,7 @@ export default function RootLayout() {
         if (!active) return;
         initializeStores();
         initializeEntitlements();
+        setTimeout(retryPendingProvenance, 1500);
       })
       .catch(() => {});
 
