@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet, RefreshControl, TextInput, Linking, Share } from 'react-native';
 import { Theme } from '@/constants/theme';
 import { H1, H2, H3, H4, Body, Caption, Overline, Mono } from '@/components/Typography';
@@ -12,18 +12,73 @@ import { Modal } from '@/components/Modal';
 import { useAppStore } from '@/store/appStore';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Conversation, Transcript, TranscriptSegment, SpeakerLabel, ProcessingStatus, Commitment } from '@/types';
+import { Conversation, Transcript, TranscriptSegment, SpeakerLabel, ProcessingStatus, Commitment, ConversationProvenance } from '@/types';
+import { useWalletConnectModal } from '@walletconnect/modal-react-native';
+import { isAddress, type Hex } from 'viem';
+import { hashConversationArtifact, submitMonadProof, verifyMonadProof } from '@/services/blockchain/monad';
 
 export default function ConversationDetailScreen() {
   const { id: rawId } = useLocalSearchParams();
   const conversationId = Array.isArray(rawId) ? rawId[0] : String(rawId ?? '');
   const { conversations, updateConversation } = useAppStore();
   const router = useRouter();
+  const { provider, address, isConnected } = useWalletConnectModal();
+  const provenanceAttemptRef = useRef<string | null>(null);
 
   const conversation = conversations.find((c) => c.id === conversationId);
   const [activeTab, setActiveTab] = useState<'overview' | 'transcript' | 'products' | 'commitments' | 'receipt' | 'evidence'>('overview');
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [whatsappMessage, setWhatsAppMessage] = useState('');
+  const [verifyingProvenance, setVerifyingProvenance] = useState(false);
+
+  useEffect(() => {
+    const provenance = conversation?.provenance;
+    if (
+      !conversation ||
+      !provenance ||
+      !['pending', 'submitting'].includes(provenance.status) ||
+      !isConnected ||
+      !provider ||
+      !address ||
+      !isAddress(address) ||
+      provenanceAttemptRef.current === conversation.id
+    ) {
+      return;
+    }
+
+    provenanceAttemptRef.current = conversation.id;
+    const submitting: ConversationProvenance = {
+      ...provenance,
+      status: 'submitting',
+      error: undefined,
+      updatedAt: new Date().toISOString(),
+    };
+    updateConversation(conversation.id, { provenance: submitting });
+
+    submitMonadProof(provider, address, provenance.artifactHash as Hex)
+      .then((proof) => {
+        updateConversation(conversation.id, {
+          provenance: {
+            ...submitting,
+            status: 'verified',
+            transactionHash: proof.transactionHash,
+            explorerUrl: proof.explorerUrl,
+            blockNumber: proof.blockNumber.toString(),
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      })
+      .catch((error) => {
+        updateConversation(conversation.id, {
+          provenance: {
+            ...submitting,
+            status: 'failed',
+            error: error instanceof Error ? error.message : 'Monad proof submission failed.',
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      });
+  }, [address, conversation, isConnected, provider, updateConversation]);
 
   if (!conversation) {
     return (
@@ -78,6 +133,38 @@ export default function ConversationDetailScreen() {
     updateConversation(conversation.id, {
       analysis: { ...conversation.analysis, commitments },
     });
+  };
+
+  const handleVerifyProvenance = async () => {
+    const provenance = conversation.provenance;
+    if (!provenance?.transactionHash) return;
+    setVerifyingProvenance(true);
+    try {
+      const expectedHash = hashConversationArtifact(conversation);
+      const result = await verifyMonadProof(
+        provenance.transactionHash as Hex,
+        expectedHash
+      );
+      updateConversation(conversation.id, {
+        provenance: {
+          ...provenance,
+          status: result.verified ? 'verified' : 'failed',
+          error: result.verified ? undefined : 'The saved artifact no longer matches the on-chain fingerprint.',
+          updatedAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      updateConversation(conversation.id, {
+        provenance: {
+          ...provenance,
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'Unable to verify the Monad proof.',
+          updatedAt: new Date().toISOString(),
+        },
+      });
+    } finally {
+      setVerifyingProvenance(false);
+    }
   };
 
   const handleSendWhatsApp = () => {
@@ -154,6 +241,13 @@ export default function ConversationDetailScreen() {
             </View>
           </View>
         </Card>
+
+        <ProvenanceCard
+          provenance={conversation.provenance}
+          onOpen={() => router.push('/settings/monad')}
+          onVerify={handleVerifyProvenance}
+          verifying={verifyingProvenance}
+        />
 
         <View style={styles.tabs}>
           {tabs.map((tab) => (
@@ -719,6 +813,80 @@ function ReceiptTab({ conversation }: { conversation: Conversation }) {
   );
 }
 
+function ProvenanceCard({
+  provenance,
+  onOpen,
+  onVerify,
+  verifying,
+}: {
+  provenance?: ConversationProvenance;
+  onOpen: () => void;
+  onVerify: () => void;
+  verifying: boolean;
+}) {
+  if (!provenance) return null;
+
+  const statusLabel = {
+    pending: 'PENDING',
+    submitting: 'SUBMITTING',
+    verified: 'VERIFIED',
+    failed: 'FAILED',
+  }[provenance.status];
+  const statusColor = {
+    pending: Theme.colors.warning,
+    submitting: Theme.colors.primaryBlue,
+    verified: Theme.colors.success,
+    failed: Theme.colors.error,
+  }[provenance.status];
+
+  return (
+    <Card variant="outlined" padding="md" style={styles.provenanceCard}>
+      <View style={styles.provenanceHeader}>
+        <View style={styles.provenanceTitleRow}>
+          <Ionicons name="shield-checkmark" size={20} color={statusColor} />
+          <H3 weight="semiBold" color="textPrimary">Monad Provenance</H3>
+        </View>
+        <Badge variant={provenance.status === 'verified' ? 'success' : provenance.status === 'failed' ? 'error' : 'warning'} size="sm">
+          {statusLabel}
+        </Badge>
+      </View>
+      <Caption color="textMuted">
+        {provenance.status === 'verified'
+          ? 'The finalized artifact fingerprint was confirmed on Monad Testnet.'
+          : provenance.status === 'submitting'
+            ? 'A connected wallet is submitting and verifying the proof.'
+            : provenance.status === 'failed'
+              ? provenance.error || 'Proof submission failed. The conversation remains saved locally.'
+              : 'The artifact is finalized and waiting for a connected wallet or retry.'}
+      </Caption>
+      <View style={styles.provenanceHash}>
+        <Caption color="textMuted">FINGERPRINT</Caption>
+        <Mono color="textPrimary">{provenance.artifactHash}</Mono>
+      </View>
+      {provenance.transactionHash ? (
+        <View style={styles.provenanceHash}>
+          <Caption color="textMuted">TRANSACTION</Caption>
+          <Mono color="textPrimary">{provenance.transactionHash}</Mono>
+        </View>
+      ) : null}
+      {provenance.explorerUrl ? (
+        <>
+          <Button variant="outline" fullWidth onPress={() => Linking.openURL(provenance.explorerUrl!).catch(() => {})}>
+            Open Monad Explorer
+          </Button>
+          <Button variant="ghost" fullWidth onPress={onVerify} disabled={verifying}>
+            {verifying ? 'Verifying Proof...' : 'Verify Proof Again'}
+          </Button>
+        </>
+      ) : (
+        <Button variant="outline" fullWidth onPress={onOpen}>
+          {provenance.status === 'failed' ? 'Retry Provenance' : 'Connect Wallet to Prove'}
+        </Button>
+      )}
+    </Card>
+  );
+}
+
 function EvidenceTab({ conversation }: { conversation: Conversation }) {
   const [showPdfNote, setShowPdfNote] = useState(false);
 
@@ -979,6 +1147,25 @@ const styles = StyleSheet.create({
   headerActions: {},
   summaryCard: {
     marginBottom: Theme.spacing[4],
+  },
+  provenanceCard: {
+    marginBottom: Theme.spacing[4],
+    gap: Theme.spacing[3],
+  },
+  provenanceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Theme.spacing[2],
+  },
+  provenanceTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Theme.spacing[2],
+    flex: 1,
+  },
+  provenanceHash: {
+    gap: Theme.spacing[1],
   },
   summaryGrid: {
     flexDirection: 'row',

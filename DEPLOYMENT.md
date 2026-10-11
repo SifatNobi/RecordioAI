@@ -34,3 +34,18 @@ mobile app or Expo environment variables.
 
 The current `api.recordioai.com` hostname has no public DNS record, so it must
 not be used for a release until DNS and HTTPS are configured and verified.
+
+## Monad provenance
+
+The app computes a deterministic fingerprint from the finalized transcript,
+analysis, recording type, duration, and recording start time. It stores only
+that fingerprint in the calldata of a zero-value self-transaction on Monad
+Testnet. The app waits for a successful receipt and re-reads the transaction
+calldata before showing the proof as verified.
+
+The current deployment has no server-side relayer or signing key. When an
+existing WalletConnect session is connected, finalized conversations
+automatically attempt submission after analysis. Without a connected wallet,
+the conversation remains pending and can be retried from the Monad Provenance
+screen. A relayer must not be added without a dedicated server-side signer,
+request validation, rate limits, and restricted transaction construction.

@@ -98,8 +98,20 @@ export interface Conversation {
   analysis?: ConversationAnalysis;
   receipt?: ConversationReceipt;
   qualityMetrics?: ConversationQuality;
+  provenance?: ConversationProvenance;
   tags: string[];
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationProvenance {
+  status: 'pending' | 'submitting' | 'verified' | 'failed';
+  artifactHash: string;
+  transactionHash?: string;
+  chainId: number;
+  explorerUrl?: string;
+  blockNumber?: string;
+  error?: string;
   updatedAt: string;
 }
 

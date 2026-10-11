@@ -12,6 +12,7 @@ import {
   MONAD_TESTNET_CHAIN_ID,
   MONAD_TESTNET_RPC_URL,
 } from '@/constants/env';
+import type { Conversation } from '@/types';
 
 const monadTestnet = defineChain({
   id: MONAD_TESTNET_CHAIN_ID,
@@ -104,6 +105,18 @@ function canonicalize(value: unknown): string {
 
 export function hashArtifact(artifact: unknown): Hex {
   return keccak256(stringToHex(canonicalize(artifact)));
+}
+
+export function hashConversationArtifact(conversation: Pick<Conversation, 'transcript' | 'analysis' | 'customer' | 'duration' | 'startedAt'>): Hex {
+  return hashArtifact({
+    transcript: conversation.transcript?.fullText || '',
+    analysis: conversation.analysis,
+    recording: {
+      recordingType: conversation.customer.metadata.recordingType,
+      duration: conversation.duration,
+      createdAt: conversation.startedAt,
+    },
+  });
 }
 
 export function proofData(artifactHash: Hex): Hex {

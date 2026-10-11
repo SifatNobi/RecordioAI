@@ -18,6 +18,8 @@ import {
   ConversationAnalysis,
   SpeakerLabel,
 } from '@/types';
+import { hashConversationArtifact } from '@/services/blockchain/monad';
+import { MONAD_TESTNET_CHAIN_ID } from '@/constants/env';
 
 function generateId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -78,6 +80,7 @@ function buildConversation(params: {
 
   const isPhoneCall = recording.recordingType === 'phone_call';
 
+
   const customer: Customer = {
     id: generateId('cus'),
     phoneNumber: isPhoneCall ? 'Phone call (mic)' : 'Local recording',
@@ -104,6 +107,18 @@ function buildConversation(params: {
     duration: recording.duration,
     transcript,
     analysis,
+    provenance: {
+      status: 'pending',
+      artifactHash: hashConversationArtifact({
+        transcript,
+        analysis,
+        customer,
+        duration: recording.duration,
+        startedAt: recording.createdAt,
+      }),
+      chainId: MONAD_TESTNET_CHAIN_ID,
+      updatedAt: now,
+    },
     tags: [isPhoneCall ? 'phone-call' : 'recording'],
     createdAt: recording.createdAt,
     updatedAt: now,
