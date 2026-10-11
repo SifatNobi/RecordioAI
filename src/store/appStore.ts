@@ -35,6 +35,7 @@ interface AppActions {
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   initializeStores: () => void;
+  markHydrated: () => void;
 }
 
 const defaultOnboarding: OnboardingState = {
@@ -133,6 +134,7 @@ export const useAppStore = create<AppState & AppActions>()(
       initializeStores: () => {
         // Initialization logic can go here if needed
       },
+      markHydrated: () => set({ hasHydrated: true }),
     }),
     {
       name: 'recordioai-app-storage',

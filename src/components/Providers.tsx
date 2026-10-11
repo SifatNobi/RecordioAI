@@ -14,11 +14,18 @@ interface ProvidersProps {
 }
 
 export function Providers({ children }: ProvidersProps) {
+  const [walletConnectReady, setWalletConnectReady] = React.useState(false);
+
+  React.useEffect(() => {
+    const timeoutId = setTimeout(() => setWalletConnectReady(true), 500);
+    return () => clearTimeout(timeoutId);
+  }, []);
+
   return (
     <GestureHandlerRootView style={styles.container}>
       <View style={styles.container}>
         {children}
-        {WALLETCONNECT_PROJECT_ID ? (
+        {walletConnectReady && WALLETCONNECT_PROJECT_ID ? (
           <WalletConnectModal
             projectId={WALLETCONNECT_PROJECT_ID}
             sessionParams={{

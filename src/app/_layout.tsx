@@ -34,6 +34,7 @@ const useIoniconsFont = () =>
 
 export default function RootLayout() {
   const initializeStores = useAppStore((s) => s.initializeStores);
+  const markHydrated = useAppStore((s) => s.markHydrated);
   const initializeEntitlements = useEntitlementStore((s) => s.initializeEntitlements);
   const [fontsLoaded] = useIoniconsFont();
 
@@ -64,13 +65,15 @@ export default function RootLayout() {
       if (fontsLoaded) hide();
     });
     const timeout = setTimeout(hide, 1500);
+    const hydrationTimeout = setTimeout(markHydrated, 1200);
 
     return () => {
       active = false;
       cancelAnimationFrame(frame);
       clearTimeout(timeout);
+      clearTimeout(hydrationTimeout);
     };
-  }, [initializeStores, initializeEntitlements, fontsLoaded]);
+  }, [initializeStores, initializeEntitlements, markHydrated, fontsLoaded]);
 
   return (
     <SafeAreaProvider>

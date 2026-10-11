@@ -16,7 +16,7 @@ export const WALLETCONNECT_PROJECT_ID =
 
 export const APP_CONFIG = {
   name: 'RecordioAI',
-  version: '1.2.7',
+  version: '1.2.8',
   bundleId: 'com.recordioai.app',
   supportEmail: 'support@recordioai.com',
   privacyUrl: 'https://recordioai.com/privacy',
