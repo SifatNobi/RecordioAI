@@ -9,9 +9,11 @@ import { useEntitlementStore } from '@/store/entitlementStore';
 import { Theme } from '@/constants/theme';
 import { recordStartupStage } from '@/services/startupDiagnostics';
 
+// Prevent splash from auto-hiding while we initialize
 SplashScreen.preventAutoHideAsync().catch(() => {
-  // Keep the app usable if the splash API is unavailable.
+  console.warn('[startup] SplashScreen.preventAutoHideAsync failed');
 });
+
 recordStartupStage('root-layout-evaluated');
 
 const { backgroundPrimary, textPrimary } = Theme.colors;
@@ -38,28 +40,32 @@ export default function RootLayout() {
   const initializeStores = useAppStore((s) => s.initializeStores);
   const markHydrated = useAppStore((s) => s.markHydrated);
   const initializeEntitlements = useEntitlementStore((s) => s.initializeEntitlements);
-  useIoniconsFont();
+  const [fontLoaded] = useIoniconsFont();
 
   React.useEffect(() => {
     recordStartupStage('providers-mounted');
     let active = true;
 
+    // Initialize stores immediately
     initializeStores();
     initializeEntitlements();
 
-    // Hydration is persisted-state bookkeeping, not a prerequisite for
-    // rendering the router. The index route displays a safe loading state
-    // until this flag is set.
+    // Mark hydration complete after a short delay to allow Zustand persist to complete
     const hydrationTimeout = setTimeout(() => {
-      if (active) markHydrated();
-    }, 1200);
+      if (active) {
+        markHydrated();
+        recordStartupStage('hydration-complete');
+      }
+    }, 800);
 
-    // Recovery is best effort and must never delay navigation or splash
-    // dismissal.
+    // Recover pending provenance submissions (non-blocking)
     const recoveryTimeout = setTimeout(() => {
       if (!active) return;
       void import('@/services/blockchain/automaticProvenance')
-        .then(({ retryPendingProvenance }) => retryPendingProvenance())
+        .then(({ retryPendingProvenance }) => {
+          retryPendingProvenance();
+          recordStartupStage('provenance-recovery-started');
+        })
         .catch((error) => {
           console.error(
             `[startup] provenance recovery unavailable: ${
@@ -77,15 +83,21 @@ export default function RootLayout() {
   }, [initializeStores, initializeEntitlements, markHydrated]);
 
   React.useEffect(() => {
-    // The router and its first route are now mounted. Icon fonts are
-    // non-critical and must not be able to hold the native splash forever.
+    // Hide splash once the router is ready and fonts are loaded (or failed)
+    // Font loading failure should not block the app
     const frame = requestAnimationFrame(() => {
       recordStartupStage('navigation-mounted');
-      void SplashScreen.hideAsync().catch(() => {});
-      recordStartupStage('splash-dismissed');
+      SplashScreen.hideAsync()
+        .then(() => {
+          recordStartupStage('splash-dismissed');
+        })
+        .catch((error) => {
+          console.warn('[startup] SplashScreen.hideAsync failed:', error);
+          recordStartupStage('splash-dismissed');
+        });
     });
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [fontLoaded]);
 
   return (
     <SafeAreaProvider>
