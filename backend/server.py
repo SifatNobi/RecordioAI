@@ -295,6 +295,10 @@ async def logout(authorization: Optional[str] = Header(default=None)):
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ", 1)[1].strip()
         await db.user_sessions.delete_one({"session_token": token})
+        await db.device_sessions.update_one(
+            {"token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest()},
+            {"$set": {"revoked_at": datetime.now(timezone.utc)}},
+        )
     return {"ok": True}
 
 
