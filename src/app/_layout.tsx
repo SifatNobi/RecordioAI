@@ -37,45 +37,42 @@ export default function RootLayout() {
   const initializeStores = useAppStore((s) => s.initializeStores);
   const markHydrated = useAppStore((s) => s.markHydrated);
   const initializeEntitlements = useEntitlementStore((s) => s.initializeEntitlements);
-  const [fontsLoaded] = useIoniconsFont();
+  useIoniconsFont();
 
   React.useEffect(() => {
     let active = true;
 
-    // Optional store initialization is deferred off the critical path so a
-    // failure can never block first paint.
-    Promise.resolve()
-      .then(() => {
-        if (!active) return;
-        initializeStores();
-        initializeEntitlements();
-        setTimeout(retryPendingProvenance, 1500);
-      })
-      .catch(() => {});
+    initializeStores();
+    initializeEntitlements();
 
-    // Dismiss the splash once the first frame and the icon font are ready so
-    // icons never flash as missing glyphs. The timer is a safety net so a
-    // slow task can never leave the splash up.
-    const hide = async () => {
-      try {
-        await SplashScreen.hideAsync();
-      } catch {
-        // Ignore hide failures.
-      }
-    };
-    const frame = requestAnimationFrame(() => {
-      if (fontsLoaded) hide();
-    });
-    const timeout = setTimeout(hide, 1500);
-    const hydrationTimeout = setTimeout(markHydrated, 1200);
+    // Hydration is persisted-state bookkeeping, not a prerequisite for
+    // rendering the router. The index route displays a safe loading state
+    // until this flag is set.
+    const hydrationTimeout = setTimeout(() => {
+      if (active) markHydrated();
+    }, 1200);
+
+    // Recovery is best effort and must never delay navigation or splash
+    // dismissal.
+    const recoveryTimeout = setTimeout(() => {
+      if (active) void Promise.resolve().then(retryPendingProvenance).catch(() => {});
+    }, 1500);
 
     return () => {
       active = false;
-      cancelAnimationFrame(frame);
-      clearTimeout(timeout);
       clearTimeout(hydrationTimeout);
+      clearTimeout(recoveryTimeout);
     };
-  }, [initializeStores, initializeEntitlements, markHydrated, fontsLoaded]);
+  }, [initializeStores, initializeEntitlements, markHydrated]);
+
+  React.useEffect(() => {
+    // The router and its first route are now mounted. Icon fonts are
+    // non-critical and must not be able to hold the native splash forever.
+    const frame = requestAnimationFrame(() => {
+      void SplashScreen.hideAsync().catch(() => {});
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   return (
     <SafeAreaProvider>
