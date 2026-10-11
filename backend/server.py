@@ -504,6 +504,14 @@ PROVENANCE_RELAYER_RPC_URL = os.getenv("MONAD_RELAYER_RPC_URL", "https://testnet
 PROVENANCE_PREFIX = b"RECORDIOAI-PROOF-V1:"
 
 
+class MonadRpcError(RuntimeError):
+    def __init__(self, method: str, code: object, message: str):
+        super().__init__(f"Monad RPC {method} failed ({code}): {message[:240]}")
+        self.method = method
+        self.code = code
+        self.rpc_message = message[:240]
+
+
 def _relayer_key() -> Optional[str]:
     value = os.getenv("PROVENANCE_RELAYER_PRIVATE_KEY", "")
     value = value.strip()
@@ -551,8 +559,16 @@ async def _rpc_call(method: str, params: list) -> object:
     response.raise_for_status()
     payload = response.json()
     if payload.get("error"):
-        raise RuntimeError("Monad RPC rejected the relayer request.")
+        error = payload["error"]
+        raise MonadRpcError(method, error.get("code", "unknown"), str(error.get("message", "request rejected")))
     return payload.get("result")
+
+
+def _normalize_transaction_hash(value: object) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    normalized = value if value.startswith("0x") else f"0x{value}"
+    return normalized if re.fullmatch(r"0x[0-9a-fA-F]{64}", normalized) else None
 
 
 @api.post("/provenance/submit")
@@ -586,7 +602,26 @@ async def submit_provenance(body: ProvenanceSubmitRequest, user=Depends(get_prov
     if chain_id != 10143:
         raise HTTPException(status_code=503, detail="Configured relayer RPC is not Monad Testnet.")
 
-    raw_hash = existing.get("transaction_hash") if existing else None
+    raw_hash = _normalize_transaction_hash(existing.get("transaction_hash")) if existing else None
+    if raw_hash:
+        existing_receipt = await _rpc_call("eth_getTransactionReceipt", [raw_hash])
+        if existing_receipt:
+            if existing_receipt.get("status") != "0x1":
+                raise HTTPException(status_code=502, detail="Monad provenance transaction reverted.")
+            existing_transaction = await _rpc_call("eth_getTransactionByHash", [raw_hash])
+            if (
+                existing_transaction
+                and existing_transaction.get("input") == _relayer_calldata(body.artifact_hash)
+                and existing_transaction.get("to", "").lower() == account.address.lower()
+            ):
+                return {
+                    **existing,
+                    "status": "verified",
+                    "transaction_hash": raw_hash,
+                    "chain_id": chain_id,
+                    "block_number": int(existing_receipt["blockNumber"], 16),
+                    "explorer_url": f"https://testnet.monadexplorer.com/tx/{raw_hash}",
+                }
     if not raw_hash:
         nonce = int(await _rpc_call("eth_getTransactionCount", [account.address, "pending"]), 16)
         gas_price = int(await _rpc_call("eth_gasPrice", []), 16)
@@ -596,11 +631,17 @@ async def submit_provenance(body: ProvenanceSubmitRequest, user=Depends(get_prov
             "to": account.address,
             "value": 0,
             "data": _relayer_calldata(body.artifact_hash),
-            "gas": 50000,
             "gasPrice": gas_price,
         }
+        estimated_gas = int(await _rpc_call("eth_estimateGas", [{
+            "from": account.address,
+            "to": account.address,
+            "value": hex(0),
+            "data": transaction["data"],
+        }]), 16)
+        transaction["gas"] = max(21000, (estimated_gas * 120 + 99) // 100)
         signed = account.sign_transaction(transaction)
-        raw_hash = signed.hash.hex()
+        raw_hash = _normalize_transaction_hash("0x" + signed.hash.hex())
         await db.provenance_proofs.update_one(
             {"user_id": user["user_id"], "idempotency_key": body.idempotency_key},
             {"$set": {
@@ -619,11 +660,19 @@ async def submit_provenance(body: ProvenanceSubmitRequest, user=Depends(get_prov
             broadcast_hash = await _rpc_call("eth_sendRawTransaction", ["0x" + signed.raw_transaction.hex()])
             if broadcast_hash != raw_hash:
                 raise RuntimeError("Monad RPC returned an unexpected transaction hash.")
+        except MonadRpcError as exc:
+            await db.provenance_proofs.update_one(
+                {"user_id": user["user_id"], "idempotency_key": body.idempotency_key},
+                {"$set": {"status": "failed", "error": "Monad transaction broadcast failed."}},
+            )
+            logger.error("Monad broadcast rejected: method=%s code=%s message=%s", exc.method, exc.code, exc.rpc_message)
+            raise HTTPException(status_code=502, detail="Monad transaction broadcast failed.") from exc
         except Exception as exc:
             await db.provenance_proofs.update_one(
                 {"user_id": user["user_id"], "idempotency_key": body.idempotency_key},
                 {"$set": {"status": "failed", "error": "Monad transaction broadcast failed."}},
             )
+            logger.error("Monad broadcast failed: %s", type(exc).__name__)
             raise HTTPException(status_code=502, detail="Monad transaction broadcast failed.") from exc
     if not isinstance(raw_hash, str) or not raw_hash.startswith("0x"):
         raise HTTPException(status_code=502, detail="Monad relayer returned an invalid transaction hash.")
