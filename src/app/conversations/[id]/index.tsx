@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, ScrollView, StyleSheet, RefreshControl, TextInput, Linking, Share } from 'react-native';
+import { Alert, View, ScrollView, StyleSheet, RefreshControl, TextInput, Linking, Share } from 'react-native';
 import { Theme } from '@/constants/theme';
 import { H1, H2, H3, H4, Body, Caption, Overline, Mono } from '@/components/Typography';
 import { Card, CardContent } from '@/components/Card';
@@ -16,6 +16,7 @@ import { Conversation, Transcript, TranscriptSegment, SpeakerLabel, ProcessingSt
 import { useWalletConnectModal } from '@walletconnect/modal-react-native';
 import { isAddress, type Hex } from 'viem';
 import { hashConversationArtifact, submitMonadProof, verifyMonadProof } from '@/services/blockchain/monad';
+import * as Clipboard from 'expo-clipboard';
 
 export default function ConversationDetailScreen() {
   const { id: rawId } = useLocalSearchParams();
@@ -244,7 +245,7 @@ export default function ConversationDetailScreen() {
 
         <ProvenanceCard
           provenance={conversation.provenance}
-          onOpen={() => router.push('/settings/monad')}
+          onOpen={() => router.push({ pathname: '/settings/monad', params: { conversationId: conversation.id } })}
           onVerify={handleVerifyProvenance}
           verifying={verifyingProvenance}
         />
@@ -440,6 +441,27 @@ function TranscriptTab({ conversation }: { conversation: Conversation }) {
   return (
     <View style={styles.tabContent}>
       <Card variant="outlined" padding="md" style={styles.transcriptHeader}>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={async () => {
+            const transcript = conversation.transcript;
+            if (!transcript?.fullText.trim()) {
+              Alert.alert('Transcript unavailable', 'There is no finalized transcript to copy.');
+              return;
+            }
+            const formatted = transcript.segments.length
+              ? transcript.segments
+                  .map((segment) => `[${formatTime(segment.startTime)}] ${segment.speaker}: ${segment.text}`)
+                  .join('\n')
+              : transcript.fullText;
+            await Clipboard.setStringAsync(formatted);
+            Alert.alert('Transcript copied', 'The finalized transcript is now on your clipboard.');
+          }}
+        >
+          <Ionicons name="copy-outline" size={16} style={{ marginRight: 4 }} />
+          Copy Transcript
+        </Button>
         <View style={styles.transcriptMeta}>
           <Caption color="textMuted">Language</Caption>
           <Body color="textPrimary">{conversation.transcript.language}</Body>

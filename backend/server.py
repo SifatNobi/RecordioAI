@@ -15,6 +15,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 import httpx
+from eth_account import Account
 
 from emergentintegrations_replacement import LlmChat, UserMessage, OpenAISpeechToText
 from providers import active_ai_provider, extract_with_groq, groq_enabled, transcribe_with_groq
@@ -104,6 +105,11 @@ class AnalyzeRequest(BaseModel):
     language: Optional[str] = "en"
     conversationId: Optional[str] = None
     metadata: Dict[str, object] = Field(default_factory=dict)
+
+
+class ProvenanceSubmitRequest(BaseModel):
+    artifact_hash: str = Field(pattern=r"^0x[0-9a-fA-F]{64}$")
+    idempotency_key: str = Field(min_length=8, max_length=128)
 
 
 def _require_db() -> None:
@@ -398,6 +404,105 @@ async def analyze_transcript(body: AnalyzeRequest):
         "provider": active_ai_provider(),
         "modelVersion": model_version,
     }
+
+
+# ---------------------------------------------------------------------------
+# Monad provenance relayer
+# ---------------------------------------------------------------------------
+PROVENANCE_RELAYER_RPC_URL = os.getenv("MONAD_RELAYER_RPC_URL", "https://testnet-rpc.monad.xyz")
+PROVENANCE_PREFIX = b"RECORDIOAI-PROOF-V1:"
+
+
+def _relayer_key() -> Optional[str]:
+    value = os.getenv("PROVENANCE_RELAYER_PRIVATE_KEY", "")
+    return value.strip() or None
+
+
+def _relayer_calldata(artifact_hash: str) -> str:
+    return "0x" + (PROVENANCE_PREFIX + artifact_hash.encode("ascii")).hex()
+
+
+async def _rpc_call(method: str, params: list) -> object:
+    async with httpx.AsyncClient(timeout=20) as client_http:
+        response = await client_http.post(
+            PROVENANCE_RELAYER_RPC_URL,
+            json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+        )
+    response.raise_for_status()
+    payload = response.json()
+    if payload.get("error"):
+        raise RuntimeError("Monad RPC rejected the relayer request.")
+    return payload.get("result")
+
+
+@api.post("/provenance/submit")
+async def submit_provenance(body: ProvenanceSubmitRequest, user=Depends(get_current_user)):
+    private_key = _relayer_key()
+    if not private_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Automatic provenance relayer is not configured. Connect a wallet from the Monad Provenance screen.",
+        )
+    try:
+        account = Account.from_key(private_key)
+    except Exception as exc:
+        logger.error("Provenance relayer configuration is invalid: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Automatic provenance relayer is misconfigured.") from exc
+
+    existing = await db.provenance_proofs.find_one(
+        {"user_id": user["user_id"], "idempotency_key": body.idempotency_key},
+        {"_id": 0},
+    )
+    if existing and existing.get("status") == "verified":
+        return existing
+
+    chain_id = int(await _rpc_call("eth_chainId", []), 16)
+    if chain_id != 10143:
+        raise HTTPException(status_code=503, detail="Configured relayer RPC is not Monad Testnet.")
+
+    nonce = int(await _rpc_call("eth_getTransactionCount", [account.address, "pending"]), 16)
+    gas_price = int(await _rpc_call("eth_gasPrice", []), 16)
+    transaction = {
+        "chainId": chain_id,
+        "nonce": nonce,
+        "to": account.address,
+        "value": 0,
+        "data": _relayer_calldata(body.artifact_hash),
+        "gas": 50000,
+        "gasPrice": gas_price,
+    }
+    signed = account.sign_transaction(transaction)
+    raw_hash = await _rpc_call("eth_sendRawTransaction", ["0x" + signed.raw_transaction.hex()])
+    if not isinstance(raw_hash, str) or not raw_hash.startswith("0x"):
+        raise HTTPException(status_code=502, detail="Monad relayer returned an invalid transaction hash.")
+
+    for _ in range(30):
+        receipt = await _rpc_call("eth_getTransactionReceipt", [raw_hash])
+        if receipt:
+            if receipt.get("status") != "0x1":
+                raise HTTPException(status_code=502, detail="Monad provenance transaction reverted.")
+            transaction_data = await _rpc_call("eth_getTransactionByHash", [raw_hash])
+            if not transaction_data or transaction_data.get("input") != _relayer_calldata(body.artifact_hash):
+                raise HTTPException(status_code=502, detail="Monad transaction calldata failed verification.")
+            result = {
+                "user_id": user["user_id"],
+                "idempotency_key": body.idempotency_key,
+                "status": "verified",
+                "artifact_hash": body.artifact_hash,
+                "transaction_hash": raw_hash,
+                "chain_id": chain_id,
+                "block_number": int(receipt["blockNumber"], 16),
+                "explorer_url": f"https://testnet.monadexplorer.com/tx/{raw_hash}",
+            }
+            await db.provenance_proofs.update_one(
+                {"user_id": user["user_id"], "idempotency_key": body.idempotency_key},
+                {"$set": result},
+                upsert=True,
+            )
+            return result
+        await asyncio.sleep(2)
+
+    raise HTTPException(status_code=504, detail="Monad provenance transaction confirmation timed out.")
 
 
 # ---------------------------------------------------------------------------

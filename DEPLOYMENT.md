@@ -49,3 +49,19 @@ automatically attempt submission after analysis. Without a connected wallet,
 the conversation remains pending and can be retried from the Monad Provenance
 screen. A relayer must not be added without a dedicated server-side signer,
 request validation, rate limits, and restricted transaction construction.
+
+An optional authenticated relayer endpoint is implemented at
+`POST /v1/provenance/submit`. It remains unavailable until these Render
+environment variables are configured:
+
+- `PROVENANCE_RELAYER_PRIVATE_KEY`: a dedicated Monad Testnet-only private key.
+- `MONAD_RELAYER_RPC_URL`: optional; defaults to
+  `https://testnet-rpc.monad.xyz`.
+
+The endpoint requires an existing RecordioAI bearer session, accepts only a
+32-byte artifact hash and an idempotency key, signs only a zero-value
+self-transaction to the relayer address, verifies the receipt and calldata,
+and never returns the private key. The current root mobile app has no
+authenticated session flow, so it must continue using WalletConnect until that
+account-auth flow is enabled. Never embed a relayer key or static relayer
+token in the APK.

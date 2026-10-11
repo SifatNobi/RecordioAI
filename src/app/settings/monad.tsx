@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import { useWalletConnectModal } from '@walletconnect/modal-react-native';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -14,11 +16,16 @@ import {
   type MonadProof,
 } from '@/services/blockchain/monad';
 import { isAddress, type Hex } from 'viem';
+import { useAppStore } from '@/store/appStore';
 
 export default function MonadProvenanceScreen() {
+  const { conversationId } = useLocalSearchParams<{ conversationId?: string }>();
+  const conversation = useAppStore((state) =>
+    conversationId ? state.conversations.find((item) => item.id === conversationId) : undefined
+  );
   const { open, provider, address, isConnected } = useWalletConnectModal();
-  const [reference, setReference] = useState('');
-  const [artifactText, setArtifactText] = useState('');
+  const [reference, setReference] = useState(conversation?.id || '');
+  const [artifactText, setArtifactText] = useState(conversation?.transcript?.fullText || '');
   const [proof, setProof] = useState<MonadProof | null>(null);
   const [busy, setBusy] = useState(false);
   const [verification, setVerification] = useState<boolean | null>(null);
@@ -77,13 +84,43 @@ export default function MonadProvenanceScreen() {
     });
   }, [reference, artifactText]);
 
+  React.useEffect(() => {
+    if (!conversation) return;
+    const timeoutId = setTimeout(() => {
+      setReference(conversation.id);
+      setArtifactText(conversation.transcript?.fullText || '');
+      if (conversation.provenance?.transactionHash) {
+        setProof({
+          artifactHash: conversation.provenance.artifactHash as Hex,
+          chainId: conversation.provenance.chainId,
+          transactionHash: conversation.provenance.transactionHash as Hex,
+          explorerUrl: conversation.provenance.explorerUrl || '',
+          verified: conversation.provenance.status === 'verified',
+          blockNumber: BigInt(conversation.provenance.blockNumber || '0'),
+        });
+        setVerification(conversation.provenance.status === 'verified');
+      }
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [conversation]);
+
+  const pasteClipboard = async () => {
+    const text = await Clipboard.getStringAsync();
+    if (text) setArtifactText(text);
+  };
+
   const proofMatchesArtifact =
     proof !== null && artifactHash !== null && proof.artifactHash === artifactHash;
 
   const connectWallet = async () => {
     setConnectionState('connecting');
     try {
-      await open();
+      await Promise.race([
+        open(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Wallet connection timed out. Check the wallet app and try again.')), 30000)
+        ),
+      ]);
     } catch (error) {
       setConnectionState('disconnected');
       Alert.alert('Wallet unavailable', error instanceof Error ? error.message : 'The wallet connection was not completed.');
@@ -155,10 +192,22 @@ export default function MonadProvenanceScreen() {
           multiline
           style={[styles.input, styles.multiline]}
         />
+        {!conversation ? (
+          <Button variant="ghost" onPress={pasteClipboard}>
+            Paste from Clipboard
+          </Button>
+        ) : null}
         {artifactHash ? (
-          <Caption color="textSecondary" selectable>
-            Hash: {artifactHash}
-          </Caption>
+          <Button
+            variant="ghost"
+            size="sm"
+            onPress={async () => {
+              await Clipboard.setStringAsync(artifactHash);
+              Alert.alert('Fingerprint copied');
+            }}
+          >
+            Fingerprint: {artifactHash.slice(0, 14)}… <Caption color="textMuted">Copy</Caption>
+          </Button>
         ) : null}
       </Card>
 
@@ -194,6 +243,18 @@ export default function MonadProvenanceScreen() {
                     ? 'Proof submission failed. No success was recorded.'
                     : ''}
           </Caption>
+        ) : null}
+        {proof?.transactionHash ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onPress={async () => {
+              await Clipboard.setStringAsync(proof.transactionHash);
+              Alert.alert('Transaction hash copied');
+            }}
+          >
+            Copy transaction hash
+          </Button>
         ) : null}
       </Card>
 
