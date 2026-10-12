@@ -501,6 +501,8 @@ async def analyze_transcript(body: AnalyzeRequest):
 # Monad provenance relayer
 # ---------------------------------------------------------------------------
 PROVENANCE_RELAYER_RPC_URL = os.getenv("MONAD_RELAYER_RPC_URL", "https://testnet-rpc.monad.xyz")
+# Official Monad Testnet explorer (docs.monad.xyz/developer-essentials/testnet).
+PROVENANCE_EXPLORER_URL = os.getenv("MONAD_EXPLORER_URL", "https://testnet.monadscan.com")
 PROVENANCE_PREFIX = b"RECORDIOAI-PROOF-V1:"
 
 
@@ -621,7 +623,7 @@ async def submit_provenance(body: ProvenanceSubmitRequest, user=Depends(get_prov
                     "chain_id": chain_id,
                     "error": None,
                     "block_number": int(existing_receipt["blockNumber"], 16),
-                    "explorer_url": f"https://testnet.monadexplorer.com/tx/{raw_hash}",
+                    "explorer_url": f"{PROVENANCE_EXPLORER_URL}/tx/{raw_hash}",
                 }
     if not raw_hash:
         nonce = int(await _rpc_call("eth_getTransactionCount", [account.address, "pending"]), 16)
@@ -699,7 +701,7 @@ async def submit_provenance(body: ProvenanceSubmitRequest, user=Depends(get_prov
                 "transaction_hash": raw_hash,
                 "chain_id": chain_id,
                 "block_number": int(receipt["blockNumber"], 16),
-                "explorer_url": f"https://testnet.monadexplorer.com/tx/{raw_hash}",
+                "explorer_url": f"{PROVENANCE_EXPLORER_URL}/tx/{raw_hash}",
                 "created_at": datetime.now(timezone.utc),
             }
             await db.provenance_proofs.update_one(

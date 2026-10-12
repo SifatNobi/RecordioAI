@@ -1,6 +1,6 @@
 {
   "name": "recordioai",
-  "version": "1.2.15",
+  "version": "1.2.16",
   "main": "expo-router/entry",
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
@@ -60,11 +60,15 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:startup": "node tests/startup-entry.test.js",
+    "test:monad": "node tests/monad-verification/run.js",
     "prebuild": "expo prebuild",
     "build:android": "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK=1 eas build --platform android --profile production",
     "build:android:preview": "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK=1 eas build --platform android --profile preview",
     "build:android:dev": "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK=1 eas build --platform android --profile development",
     "submit:android": "eas submit --platform android"
   },
-  "private": true
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  }
 }

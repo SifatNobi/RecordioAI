@@ -8,15 +8,26 @@ export const IS_DEV = ENVIRONMENT === 'development';
 export const MONAD_TESTNET_CHAIN_ID = 10143;
 export const MONAD_TESTNET_RPC_URL =
   process.env.EXPO_PUBLIC_MONAD_TESTNET_RPC_URL || 'https://testnet-rpc.monad.xyz';
+// Official Monad Testnet block explorers (docs.monad.xyz/developer-essentials/testnet).
+// Monadscan is used as the primary deep-link target.
+export const MONAD_EXPLORER_NAME = 'Monadscan';
 export const MONAD_EXPLORER_URL =
-  process.env.EXPO_PUBLIC_MONAD_EXPLORER_URL || 'https://testnet.monadexplorer.com';
+  process.env.EXPO_PUBLIC_MONAD_EXPLORER_URL || 'https://testnet.monadscan.com';
+export const MONAD_ALT_EXPLORER_NAME = 'MonadVision';
+export const MONAD_ALT_EXPLORER_URL = 'https://testnet.monadvision.com';
+export const MONAD_FAUCET_URL = 'https://faucet.monad.xyz';
+export const MONAD_NATIVE_CURRENCY = {
+  name: 'Monad',
+  symbol: 'MON',
+  decimals: 18,
+} as const;
 export const WALLETCONNECT_PROJECT_ID =
   process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID ||
   'b889ec40fdf5db096d981559f7ccbdb2';
 
 export const APP_CONFIG = {
   name: 'RecordioAI',
-  version: '1.2.15',
+  version: '1.2.16',
   bundleId: 'com.recordioai.app',
   supportEmail: 'support@recordioai.com',
   privacyUrl: 'https://recordioai.com/privacy',

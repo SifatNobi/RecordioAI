@@ -136,3 +136,5 @@ android-sdk/
 *.env
 credentials.json
 .credentials
+# Monad verification harness compiled output
+tests/monad-verification/out/

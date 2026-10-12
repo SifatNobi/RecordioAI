@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { Alert, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { useWalletConnectModal } from '@walletconnect/modal-react-native';
@@ -7,12 +7,17 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Body, Caption, H1, H2 } from '@/components/Typography';
 import { Theme } from '@/constants/theme';
-import { MONAD_TESTNET_CHAIN_ID } from '@/constants/env';
+import { MONAD_TESTNET_CHAIN_ID, MONAD_TESTNET_RPC_URL } from '@/constants/env';
 import {
+  describeMonadRpcError,
   ensureMonadNetwork,
+  formatMonadBalance,
+  getMonadBalance,
+  getMonadNetworkStatus,
   hashArtifact,
   submitMonadProof,
   verifyMonadProof,
+  type MonadNetworkStatus,
   type MonadProof,
 } from '@/services/blockchain/monad';
 import { isAddress, type Hex } from 'viem';
@@ -35,6 +40,81 @@ export default function MonadProvenanceScreen() {
   const [workflowState, setWorkflowState] = useState<
     'idle' | 'awaiting_approval' | 'pending' | 'confirmed' | 'failed'
   >('idle');
+  const [networkStatus, setNetworkStatus] = useState<MonadNetworkStatus | null>(null);
+  const [networkError, setNetworkError] = useState<string | null>(null);
+  const [networkLoading, setNetworkLoading] = useState(true);
+  // Balance is keyed by address so a stale value is never shown for a new wallet.
+  const [balanceState, setBalanceState] = useState<{
+    address: string;
+    value: bigint | null;
+    error: string | null;
+  } | null>(null);
+
+  // Pure fetcher: never touches component state, so effects cannot cascade renders.
+  const fetchNetworkStatus = React.useCallback(async () => {
+    try {
+      return { status: await getMonadNetworkStatus(), error: null as string | null };
+    } catch (error) {
+      return { status: null, error: describeMonadRpcError(error) };
+    }
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const result = await fetchNetworkStatus();
+      if (cancelled) return;
+      setNetworkStatus(result.status);
+      setNetworkError(result.error);
+      setNetworkLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchNetworkStatus]);
+
+  const refreshNetworkStatus = React.useCallback(() => {
+    setNetworkLoading(true);
+    void (async () => {
+      const result = await fetchNetworkStatus();
+      setNetworkStatus(result.status);
+      setNetworkError(result.error);
+      setNetworkLoading(false);
+    })();
+  }, [fetchNetworkStatus]);
+
+  const walletAddress = address && isAddress(address) ? address : null;
+
+  React.useEffect(() => {
+    if (!isConnected || !walletAddress || connectionState !== 'connected') return;
+    let cancelled = false;
+    const target = walletAddress;
+    void (async () => {
+      try {
+        const value = await getMonadBalance(target);
+        if (!cancelled) setBalanceState({ address: target, value, error: null });
+      } catch (error) {
+        if (!cancelled) {
+          setBalanceState({ address: target, value: null, error: describeMonadRpcError(error) });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [walletAddress, connectionState, isConnected]);
+
+  const walletBalanceLabel = !isConnected || !address
+    ? 'Connect a wallet to read a balance'
+    : !walletAddress
+      ? 'Connected account is not a valid EVM address'
+      : !balanceState || balanceState.address !== walletAddress
+        ? 'Reading from RPC…'
+        : balanceState.error
+          ? balanceState.error
+          : balanceState.value !== null
+            ? formatMonadBalance(balanceState.value)
+            : 'Reading from RPC…';
 
   React.useEffect(() => {
     let active = true;
@@ -175,7 +255,53 @@ export default function MonadProvenanceScreen() {
       </Body>
 
       <Card variant="outlined" padding="md" style={styles.card}>
-        <Caption color="warning" weight="semiBold">MONAD TESTNET • CHAIN {MONAD_TESTNET_CHAIN_ID}</Caption>
+        <View style={styles.statusHeader}>
+          <Caption color="warning" weight="semiBold">
+            LIVE NETWORK • MONAD TESTNET • CHAIN {MONAD_TESTNET_CHAIN_ID}
+          </Caption>
+          <Button variant="ghost" size="sm" onPress={refreshNetworkStatus} loading={networkLoading}>
+            Refresh
+          </Button>
+        </View>
+        <Caption color="textMuted" numberOfLines={2}>
+          RPC: {networkStatus?.rpcUrl || MONAD_TESTNET_RPC_URL}
+        </Caption>
+
+        {networkLoading && !networkStatus && !networkError ? (
+          <Caption color="textSecondary">Contacting the Monad Testnet RPC…</Caption>
+        ) : null}
+
+        {networkError ? (
+          <>
+            <Caption color="error">{networkError}</Caption>
+            <Button
+              variant="outline"
+              fullWidth
+              onPress={refreshNetworkStatus}
+              loading={networkLoading}
+              style={styles.button}
+            >
+              Retry RPC Check
+            </Button>
+          </>
+        ) : null}
+
+        {networkStatus ? (
+          <View style={styles.statusRows}>
+            <StatusRow label="Reported chain ID" value={String(networkStatus.chainId)} />
+            <StatusRow label="Latest block" value={networkStatus.blockNumber.toString()} />
+            <StatusRow label="Wallet balance" value={walletBalanceLabel} />
+          </View>
+        ) : null}
+
+        <Caption color="textMuted">
+          Values above are read live from the public Monad Testnet RPC. MON is testnet currency with no
+          market value and cannot be exchanged for real money.
+        </Caption>
+      </Card>
+
+      <Card variant="outlined" padding="md" style={styles.card}>
+        <Caption color="warning" weight="semiBold">ANCHOR A PROOF • CHAIN {MONAD_TESTNET_CHAIN_ID}</Caption>
         <H2 weight="semiBold" color="textPrimary" style={styles.cardTitle}>1. Prepare an artifact</H2>
         <TextInput
           value={reference}
@@ -274,12 +400,41 @@ export default function MonadProvenanceScreen() {
   );
 }
 
+function StatusRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.statusRow}>
+      <Caption color="textMuted" style={styles.statusLabel}>
+        {label}
+      </Caption>
+      <Caption color="textPrimary" weight="semiBold" style={styles.statusValue} numberOfLines={2}>
+        {value}
+      </Caption>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { padding: Theme.spacing[5], paddingTop: Theme.spacing[8], paddingBottom: Theme.spacing[12] },
   subtitle: { marginTop: Theme.spacing[2], marginBottom: Theme.spacing[5] },
   card: { marginBottom: Theme.spacing[4], gap: Theme.spacing[3] },
   cardTitle: { marginTop: Theme.spacing[2] },
+  statusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Theme.spacing[2],
+    flexWrap: 'wrap',
+  },
+  statusRows: { gap: Theme.spacing[2] },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Theme.spacing[3],
+  },
+  statusLabel: { flexShrink: 0 },
+  statusValue: { flexShrink: 1, textAlign: 'right' },
   input: {
     borderWidth: 1,
     borderColor: Theme.colors.border,
