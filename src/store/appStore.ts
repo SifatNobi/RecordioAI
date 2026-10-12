@@ -39,7 +39,7 @@ interface AppActions {
 }
 
 const defaultOnboarding: OnboardingState = {
-  completed: false,
+  completed: true,
   currentStep: 0,
   seenSteps: [],
 };

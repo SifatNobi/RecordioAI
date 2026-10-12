@@ -212,7 +212,7 @@ export async function transcribeAudio(
   const fileName = fileUri.split('/').pop() || 'recording.m4a';
   const mimeType = fileName.endsWith('.wav') ? 'audio/wav' : 'audio/mp4';
 
-  const fields: Array<[string, string]> = [];
+  const fields: [string, string][] = [];
   if (options.language) {
     fields.push(['language', options.language]);
   }

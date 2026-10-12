@@ -13,7 +13,7 @@ export type StartupStage =
   | 'startup-failed';
 
 let lastStage: StartupStage = 'native-launch';
-const stages: Array<{ stage: StartupStage; timestamp: number; error?: string }> = [];
+const stages: { stage: StartupStage; timestamp: number; error?: string }[] = [];
 
 export function recordStartupStage(stage: StartupStage, error?: unknown): void {
   lastStage = stage;
@@ -34,6 +34,6 @@ export function getLastStartupStage(): StartupStage {
   return lastStage;
 }
 
-export function getStartupDiagnostics(): Array<{ stage: StartupStage; timestamp: number; error?: string }> {
+export function getStartupDiagnostics(): { stage: StartupStage; timestamp: number; error?: string }[] {
   return [...stages];
 }

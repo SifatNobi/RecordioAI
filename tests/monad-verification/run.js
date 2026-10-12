@@ -17,7 +17,7 @@ const OUT = path.join(__dirname, 'out', 'src');
 // --- compile the real TS sources -------------------------------------------
 console.log('[build] compiling src/services/blockchain/monad.ts ...');
 execFileSync(
-  process.platform === 'win32' ? 'npx.cmd' : 'npx',
+  'cmd',
   ['tsc', '-p', path.join(__dirname, 'tsconfig.json')],
   { cwd: ROOT, stdio: 'inherit' }
 );
