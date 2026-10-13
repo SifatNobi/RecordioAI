@@ -1,4 +1,6 @@
+import 'react-native-get-random-values';
 import React from 'react';
+import { Text, View } from 'react-native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
@@ -15,6 +17,44 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 });
 
 recordStartupStage('root-layout-evaluated');
+
+interface StartupErrorBoundaryState {
+  error: Error | null;
+}
+
+class StartupErrorBoundary extends React.Component<
+  React.PropsWithChildren,
+  StartupErrorBoundaryState
+> {
+  state: StartupErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): StartupErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error): void {
+    recordStartupStage('startup-failed', error);
+    console.error(`[startup] render failure: ${error.message}`, error.stack);
+    // Never leave the user on the native splash after a render failure.
+    void SplashScreen.hideAsync().catch(() => {});
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#000000', justifyContent: 'center', padding: 24 }}>
+          <Text style={{ color: '#ffffff', fontSize: 20, fontWeight: '600', marginBottom: 12 }}>
+            RecordioAI could not start
+          </Text>
+          <Text style={{ color: '#b8b8b8', fontSize: 14 }}>
+            {this.state.error.message || 'Restart the app and try again.'}
+          </Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const { backgroundPrimary, textPrimary } = Theme.colors;
 
@@ -84,7 +124,8 @@ export default function RootLayout() {
 
   React.useEffect(() => {
     // Hide splash once the router is ready and fonts are loaded (or failed)
-    // Font loading failure should not block the app
+    // Font loading failure should not block the app. A failsafe timeout
+    // guarantees the splash can never trap the user indefinitely.
     const frame = requestAnimationFrame(() => {
       recordStartupStage('navigation-mounted');
       SplashScreen.hideAsync()
@@ -96,10 +137,22 @@ export default function RootLayout() {
           recordStartupStage('splash-dismissed');
         });
     });
-    return () => cancelAnimationFrame(frame);
+    const failsafe = setTimeout(() => {
+      recordStartupStage('navigation-mounted');
+      SplashScreen.hideAsync()
+        .then(() => {
+          recordStartupStage('splash-dismissed');
+        })
+        .catch(() => {});
+    }, 6000);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(failsafe);
+    };
   }, [fontLoaded]);
 
   return (
+    <StartupErrorBoundary>
     <SafeAreaProvider>
       <Providers>
         <Stack screenOptions={{ headerShown: false, contentStyle: CONTENT_STYLE }}>
@@ -129,5 +182,6 @@ export default function RootLayout() {
         </Stack>
       </Providers>
     </SafeAreaProvider>
+    </StartupErrorBoundary>
   );
 }

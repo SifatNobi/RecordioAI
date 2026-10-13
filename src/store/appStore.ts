@@ -44,13 +44,23 @@ const defaultOnboarding: OnboardingState = {
   seenSteps: [],
 };
 
+function safeTimeZone(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (typeof tz === 'string' && tz.length > 0) return tz;
+  } catch {
+    // Hermes on some Android builds has limited Intl support; fall back safely.
+  }
+  return 'UTC';
+}
+
 const defaultSettings: AppSettings = {
   theme: 'dark',
   notifications: true,
   autoSync: true,
   dataRetentionDays: 365,
   language: 'en',
-  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  timezone: safeTimeZone(),
 };
 
 export const useAppStore = create<AppState & AppActions>()(
