@@ -85,12 +85,14 @@ export default function CreateRecordScreen() {
             <View style={styles.optionIcon}>
               <Ionicons name={option.icon} size={32} color={option.color} />
             </View>
-            <H3 weight="semiBold" color="textPrimary" style={styles.optionTitle}>
-              {option.title}
-            </H3>
-            <Body color="textSecondary" style={styles.optionDescription}>
-              {option.description}
-            </Body>
+            <View style={styles.optionText}>
+              <H3 weight="semiBold" color="textPrimary" style={styles.optionTitle}>
+                {option.title}
+              </H3>
+              <Body color="textSecondary" style={styles.optionDescription}>
+                {option.description}
+              </Body>
+            </View>
             <View style={styles.optionArrow}>
               <Ionicons name="chevron-forward" size={24} color={Theme.colors.textMuted} />
             </View>
@@ -135,11 +137,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  // Holds the title + description so they wrap inside the card instead of
+  // competing for space as sibling items of the row (React Native defaults
+  // flexShrink to 0, which made the title overflow and the description collapse).
+  optionText: {
+    flex: 1,
+    flexShrink: 1,
+  },
   optionTitle: {
     marginBottom: Theme.spacing[1],
   },
   optionDescription: {
-    flex: 1,
     lineHeight: 22,
   },
   optionArrow: {
