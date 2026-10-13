@@ -190,7 +190,7 @@ function formatRelativeTime(dateString: string): string {
 }
 
 function formatDuration(seconds?: number): string {
-  if (!seconds) return '--:--';
+  if (!seconds || seconds <= 0) return 'Not available';
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -199,6 +199,7 @@ function formatDuration(seconds?: number): string {
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
+    backgroundColor: Theme.colors.backgroundPrimary,
   },
   content: {
     paddingHorizontal: Theme.spacing[5],

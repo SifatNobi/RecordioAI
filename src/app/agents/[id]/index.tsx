@@ -10,9 +10,10 @@ import { EmptyState } from '@/components/EmptyState';
 import { BaseModal, ModalContent } from '@/components/Modal';
 import { Input } from '@/components/Input';
 import { useAppStore } from '@/store/appStore';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AgentStatus, PhoneNumber } from '@/types';
+import { ScreenHeader, useSafeBack } from '@/components/ScreenHeader';
 
 let phoneCounter = 0;
 function createPhoneNumberId(): string {
@@ -24,21 +25,22 @@ export default function AgentDetailScreen() {
   const { id: rawId } = useLocalSearchParams();
   const agentId = Array.isArray(rawId) ? rawId[0] : String(rawId ?? '');
   const { agents, removeAgent, updateAgent } = useAppStore();
-  const router = useRouter();
 
   const agent = agents.find((a) => a.id === agentId);
 
   const [showDisconnectModal, setShowDisconnectModal] = React.useState(false);
   const [showAddPhoneModal, setShowAddPhoneModal] = React.useState(false);
   const [phoneNumberInput, setPhoneNumberInput] = React.useState('');
+  const safeBack = useSafeBack('/agents');
 
   if (!agent) {
     return (
       <View style={styles.container}>
+        <ScreenHeader title="Agent Details" fallback="/agents" />
         <EmptyState
           title="Agent Not Found"
           description="This agent may have been removed or the ID is invalid."
-          action={{ label: 'Back to Agents', onPress: () => router.back() }}
+          action={{ label: 'Back to Agents', onPress: safeBack }}
         />
       </View>
     );
@@ -64,7 +66,7 @@ export default function AgentDetailScreen() {
 
   const handleDisconnect = () => {
     removeAgent(agent.id);
-    router.back();
+    safeBack();
   };
 
   const handleAddPhoneNumber = () => {
@@ -105,6 +107,7 @@ export default function AgentDetailScreen() {
 
   return (
     <View style={styles.container}>
+      <ScreenHeader title="Agent Details" fallback="/agents" />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}

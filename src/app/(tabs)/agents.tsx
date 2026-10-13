@@ -145,18 +145,20 @@ export default function AgentsScreen() {
         </View>
       )}
 
-      <View style={styles.fabContainer}>
-        <Button
-          variant="primary"
-          size="lg"
-          fullWidth
-          onPress={handleConnectAgent}
-          style={styles.fab}
-        >
-          <Ionicons name="add" size={20} style={{ marginRight: 8 }} />
-          Connect AI Agent
-        </Button>
-      </View>
+      {agents.length > 0 && (
+        <View style={styles.fabContainer}>
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
+            onPress={handleConnectAgent}
+            style={styles.fab}
+          >
+            <Ionicons name="add" size={20} style={{ marginRight: 8 }} />
+            Connect AI Agent
+          </Button>
+        </View>
+      )}
 
       <View style={styles.bottomSpacer} />
     </ScrollView>
@@ -181,6 +183,7 @@ function formatRelativeTime(dateString: string): string {
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
+    backgroundColor: Theme.colors.backgroundPrimary,
   },
   content: {
     paddingHorizontal: Theme.spacing[5],
@@ -206,7 +209,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: Theme.borderRadius.lg,
-    backgroundColor: 'rgba(0, 102, 255, 0.1)',
+    backgroundColor: 'rgba(22, 133, 255, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: Theme.spacing[1],

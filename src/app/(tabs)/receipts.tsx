@@ -54,6 +54,12 @@ export default function ReceiptsScreen() {
         <View style={styles.receiptsList}>
           {conversationsWithReceipts.map((conversation) => {
             const receipt = conversation.receipt!;
+            const verificationLabel = typeof receipt.verificationStatus === 'string' && receipt.verificationStatus
+              ? receipt.verificationStatus.charAt(0).toUpperCase() + receipt.verificationStatus.slice(1)
+              : 'Unknown';
+            const receiptShortId = typeof receipt.id === 'string' && receipt.id
+              ? `${receipt.id.slice(0, 12)}...`
+              : 'Unavailable';
             return (
               <Card
                 key={conversation.id}
@@ -102,15 +108,15 @@ export default function ReceiptsScreen() {
                         }
                         size="sm"
                       >
-                        {receipt.verificationStatus.charAt(0).toUpperCase() + receipt.verificationStatus.slice(1)}
+                        {verificationLabel}
                       </Badge>
                       <Body color="textSecondary" style={styles.receiptDuration}>
                         {formatDuration(conversation.duration)}
                       </Body>
                     </View>
-                    <Caption color="textMuted" style={styles.receiptId}>
-                      Receipt ID: {receipt.id.slice(0, 12)}...
-                    </Caption>
+                      <Caption color="textMuted" style={styles.receiptId}>
+                        Receipt ID: {receiptShortId}
+                      </Caption>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color={Theme.colors.textMuted} />
                 </View>
@@ -141,7 +147,7 @@ function formatRelativeTime(dateString: string): string {
 }
 
 function formatDuration(seconds?: number): string {
-  if (!seconds) return '--:--';
+  if (!seconds || seconds <= 0) return 'Not available';
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -150,6 +156,7 @@ function formatDuration(seconds?: number): string {
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
+    backgroundColor: Theme.colors.backgroundPrimary,
   },
   content: {
     paddingHorizontal: Theme.spacing[5],

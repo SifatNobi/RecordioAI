@@ -2,7 +2,7 @@
   "expo": {
     "name": "RecordioAI",
     "slug": "recordioai",
-    "version": "1.2.18",
+    "version": "1.2.19",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.recordioai.app",
-      "versionCode": 24,
+      "versionCode": 25,
       "adaptiveIcon": {
         "backgroundColor": "#000000",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -47,6 +47,7 @@
       "expo-font",
       "./plugins/withRecordioRecording",
       "./plugins/withRecordioTestBundle",
+      "./plugins/withRecordioDarkTheme",
       [
         "expo-build-properties",
         {

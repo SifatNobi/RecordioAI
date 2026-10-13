@@ -13,6 +13,7 @@ import { useAppStore } from '@/store/appStore';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Conversation, Transcript, TranscriptSegment, SpeakerLabel, ProcessingStatus, Commitment, ConversationProvenance } from '@/types';
+import { ScreenHeader, useSafeBack } from '@/components/ScreenHeader';
 import {
   auditActionLabel,
   commitmentStatusLabel,
@@ -35,14 +36,16 @@ export default function ConversationDetailScreen() {
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [whatsappMessage, setWhatsAppMessage] = useState('');
   const [verifyingProvenance, setVerifyingProvenance] = useState(false);
+  const safeBack = useSafeBack('/conversations');
 
   if (!conversation) {
     return (
       <View style={styles.container}>
+        <ScreenHeader title="Conversation" fallback="/conversations" />
         <EmptyState
           title="Conversation Not Found"
           description="This conversation may have been removed or the ID is invalid."
-          action={{ label: 'Back to Conversations', onPress: () => router.back() }}
+          action={{ label: 'Back to Conversations', onPress: safeBack }}
         />
       </View>
     );
@@ -139,6 +142,7 @@ export default function ConversationDetailScreen() {
 
   return (
     <View style={styles.container}>
+      <ScreenHeader title="Conversation" fallback="/conversations" />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
@@ -1081,7 +1085,7 @@ function formatRelativeTime(dateString: string): string {
 }
 
 function formatDuration(seconds?: number): string {
-  if (!seconds) return '--:--';
+  if (!seconds || seconds <= 0) return 'Not available';
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins}:${secs.toString().padStart(2, '0')}`;

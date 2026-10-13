@@ -512,7 +512,7 @@ function StatusRow({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1 },
+  scroll: { flex: 1, backgroundColor: Theme.colors.backgroundPrimary },
   content: { padding: Theme.spacing[5], paddingTop: Theme.spacing[8], paddingBottom: Theme.spacing[12] },
   subtitle: { marginTop: Theme.spacing[2], marginBottom: Theme.spacing[5] },
   card: { marginBottom: Theme.spacing[4], gap: Theme.spacing[3] },

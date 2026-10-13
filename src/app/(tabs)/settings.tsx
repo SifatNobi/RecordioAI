@@ -144,23 +144,11 @@ export default function SettingsScreen() {
           <View style={styles.settingRow}>
             <View style={styles.settingInfo}>
               <H4 weight="semiBold" color="textPrimary">Theme</H4>
-              <Caption color="textMuted">Choose your preferred color scheme</Caption>
+              <Caption color="textMuted">Dark theme is always on for evidence readability</Caption>
             </View>
-            <View style={styles.themeSelector}>
-              {(['dark', 'light', 'system'] as const).map((theme) => (
-                <Button
-                  key={theme}
-                  variant={settings.theme === theme ? 'primary' : 'outline'}
-                  size="sm"
-                  onPress={() => updateSettings({ theme })}
-                  style={styles.themeButton}
-                >
-                  <Caption weight="semiBold" color={settings.theme === theme ? 'textOnPrimary' : 'textPrimary'}>
-                    {theme.charAt(0).toUpperCase() + theme.slice(1)}
-                  </Caption>
-                </Button>
-              ))}
-            </View>
+            <Badge variant="info" size="sm">
+              Dark
+            </Badge>
           </View>
         </Card>
       </View>
@@ -339,6 +327,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
+    backgroundColor: Theme.colors.backgroundPrimary,
   },
   content: {
     paddingHorizontal: Theme.spacing[5],
@@ -370,7 +359,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Theme.spacing[2],
     paddingVertical: Theme.spacing[0.5],
     borderRadius: Theme.borderRadius.full,
-    backgroundColor: 'rgba(245, 183, 0, 0.15)',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
   },
   planFeatures: {
     gap: Theme.spacing[2],

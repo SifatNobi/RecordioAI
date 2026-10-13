@@ -15,10 +15,10 @@ type BadgeSize = NonNullable<BadgeProps['size']>;
 
 const variantStyles: Record<BadgeVariant, ViewStyle> = {
   default: { backgroundColor: Theme.colors.surfaceElevated },
-  success: { backgroundColor: 'rgba(0, 210, 106, 0.15)' },
-  warning: { backgroundColor: 'rgba(245, 183, 0, 0.15)' },
-  error: { backgroundColor: 'rgba(255, 77, 90, 0.15)' },
-  info: { backgroundColor: 'rgba(0, 102, 255, 0.15)' },
+  success: { backgroundColor: 'rgba(34, 197, 94, 0.15)' },
+  warning: { backgroundColor: 'rgba(245, 158, 11, 0.15)' },
+  error: { backgroundColor: 'rgba(239, 68, 68, 0.15)' },
+  info: { backgroundColor: 'rgba(22, 133, 255, 0.15)' },
   processing: { backgroundColor: 'rgba(63, 231, 255, 0.15)' },
 };
 

@@ -2,6 +2,7 @@ import 'react-native-get-random-values';
 import React from 'react';
 import { Text, View } from 'react-native';
 import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -153,6 +154,7 @@ export default function RootLayout() {
 
   return (
     <StartupErrorBoundary>
+      <StatusBar style="light" />
     <SafeAreaProvider>
       <Providers>
         <Stack screenOptions={{ headerShown: false, contentStyle: CONTENT_STYLE }}>
@@ -165,11 +167,11 @@ export default function RootLayout() {
           />
           <Stack.Screen
             name="agents/[id]"
-            options={{ headerShown: true, title: 'Agent Details', ...NAV_HEADERS }}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="conversations/[id]"
-            options={{ headerShown: true, title: 'Conversation', ...NAV_HEADERS }}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="settings/subscription"

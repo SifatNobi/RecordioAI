@@ -1,6 +1,6 @@
 {
   "name": "recordioai",
-  "version": "1.2.18",
+  "version": "1.2.19",
   "main": "expo-router/entry",
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
