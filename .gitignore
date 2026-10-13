@@ -138,3 +138,5 @@ credentials.json
 .credentials
 # Monad verification harness compiled output
 tests/monad-verification/out/
+# Analysis normalization harness compiled output
+tests/analysis-normalization/out/

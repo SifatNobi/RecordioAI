@@ -232,7 +232,9 @@ export interface Commitment {
   id: string;
   conversationId: string;
   description: string;
-  promisedBy: 'AI_AGENT' | 'CUSTOMER' | 'BOTH';
+  // 'UNKNOWN' is a real state: the backend extraction explicitly reports an
+  // empty speaker when attribution is not confidently identifiable.
+  promisedBy: 'AI_AGENT' | 'CUSTOMER' | 'BOTH' | 'UNKNOWN';
   dueDate?: string;
   status: CommitmentStatus;
   confidence: number;

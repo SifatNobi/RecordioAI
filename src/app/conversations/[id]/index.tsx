@@ -13,6 +13,14 @@ import { useAppStore } from '@/store/appStore';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Conversation, Transcript, TranscriptSegment, SpeakerLabel, ProcessingStatus, Commitment, ConversationProvenance } from '@/types';
+import {
+  auditActionLabel,
+  commitmentStatusLabel,
+  feeTypeLabel,
+  normalizeAnalysisLists,
+  normalizeCommitments,
+  promisedByLabel,
+} from '@/services/recording/normalizeAnalysis';
 import { type Hex } from 'viem';
 import { hashConversationArtifact, verifyMonadProof } from '@/services/blockchain/monad';
 import * as Clipboard from 'expo-clipboard';
@@ -73,9 +81,15 @@ export default function ConversationDetailScreen() {
 
   const handleToggleCommitment = (commitmentId: string) => {
     if (!conversation.analysis) return;
-    const commitments = conversation.analysis.commitments.map((c) =>
+    // Normalize first: legacy persisted items may lack ids/statuses, so match
+    // by position after normalization rather than by a possibly-missing id.
+    const normalized = normalizeCommitments(
+      conversation.analysis.commitments,
+      conversation.id
+    );
+    const commitments = normalized.map((c) =>
       c.id === commitmentId
-        ? { ...c, status: (c.status === 'completed' ? 'pending' : 'completed') as Commitment['status'] }
+        ? { ...c, status: (c.status === 'completed' ? 'pending' : 'completed') as Commitment['status'], updatedAt: new Date().toISOString() }
         : c
     );
     updateConversation(conversation.id, {
@@ -497,13 +511,17 @@ function ProductsTab({ conversation }: { conversation: Conversation }) {
     );
   }
 
+  // Legacy persisted analyses may hold malformed lists; normalize on read.
+  const lists = normalizeAnalysisLists(conversation.analysis, conversation.id);
+  const { products, prices, fees } = lists;
+
   return (
     <View style={styles.tabContent}>
       <View style={styles.section}>
         <H3 weight="semiBold" color="textPrimary" style={styles.sectionTitle}>
           Products
         </H3>
-        {conversation.analysis.products.length === 0 ? (
+        {products.length === 0 ? (
           <EmptyState
             title="NO PRODUCTS EXTRACTED"
             description="No products were identified in this conversation."
@@ -511,7 +529,7 @@ function ProductsTab({ conversation }: { conversation: Conversation }) {
           />
         ) : (
           <View style={styles.productsList}>
-            {conversation.analysis.products.map((product) => (
+            {products.map((product) => (
               <Card key={product.id} variant="outlined" padding="md" style={styles.productCard}>
                 <View style={styles.productHeader}>
                   <H4 weight="semiBold" color="textPrimary">{product.name}</H4>
@@ -539,7 +557,7 @@ function ProductsTab({ conversation }: { conversation: Conversation }) {
         <H3 weight="semiBold" color="textPrimary" style={styles.sectionTitle}>
           Prices
         </H3>
-        {conversation.analysis.prices.length === 0 ? (
+        {prices.length === 0 ? (
           <EmptyState
             title="NO PRICES EXTRACTED"
             description="No pricing information was identified in this conversation."
@@ -547,7 +565,7 @@ function ProductsTab({ conversation }: { conversation: Conversation }) {
           />
         ) : (
           <View style={styles.pricesList}>
-            {conversation.analysis.prices.map((price) => (
+            {prices.map((price) => (
               <Card key={price.id} variant="outlined" padding="md" style={styles.priceCard}>
                 <View style={styles.priceHeader}>
                   <Body color="textPrimary" weight="semiBold" style={styles.priceAmount}>
@@ -577,7 +595,7 @@ function ProductsTab({ conversation }: { conversation: Conversation }) {
         <H3 weight="semiBold" color="textPrimary" style={styles.sectionTitle}>
           Fees
         </H3>
-        {conversation.analysis.fees.length === 0 ? (
+        {fees.length === 0 ? (
           <EmptyState
             title="NO FEES EXTRACTED"
             description="No fees were identified in this conversation."
@@ -585,12 +603,12 @@ function ProductsTab({ conversation }: { conversation: Conversation }) {
           />
         ) : (
           <View style={styles.feesList}>
-            {conversation.analysis.fees.map((fee) => (
+            {fees.map((fee) => (
               <Card key={fee.id} variant="outlined" padding="md" style={styles.feeCard}>
                 <View style={styles.feeHeader}>
                   <View>
                     <H4 weight="semiBold" color="textPrimary">{fee.name}</H4>
-                    <Caption color="textMuted">{fee.type.replace('_', ' ')}</Caption>
+                    <Caption color="textMuted">{feeTypeLabel(fee.type)}</Caption>
                   </View>
                   <View style={styles.feeAmount}>
                     <Body color="textPrimary" weight="semiBold">
@@ -626,9 +644,16 @@ function CommitmentsTab({ conversation, onToggleCommitment }: { conversation: Co
     );
   }
 
+  // Legacy persisted analyses may hold raw backend-shaped items (no id,
+  // promisedBy, or status). Normalize on read so old data renders safely.
+  const commitments = normalizeCommitments(
+    conversation.analysis.commitments,
+    conversation.id
+  );
+
   return (
     <View style={styles.tabContent}>
-      {conversation.analysis.commitments.length === 0 ? (
+      {commitments.length === 0 ? (
         <EmptyState
           title="NO COMMITMENTS EXTRACTED"
           description="No commitments or promises were identified in this conversation."
@@ -636,7 +661,7 @@ function CommitmentsTab({ conversation, onToggleCommitment }: { conversation: Co
         />
       ) : (
         <View style={styles.commitmentsList}>
-          {conversation.analysis.commitments.map((commitment) => (
+          {commitments.map((commitment) => (
             <Card key={commitment.id} variant="outlined" padding="md" style={styles.commitmentCard}>
               <View style={styles.commitmentHeader}>
                 <View style={[styles.commitmentInfo, { flex: 1 }]}>
@@ -645,7 +670,7 @@ function CommitmentsTab({ conversation, onToggleCommitment }: { conversation: Co
                   </Body>
                   <View style={styles.commitmentMeta}>
                     <Caption color="textMuted">
-                      Promised by: {commitment.promisedBy.replace('_', ' ')}
+                      Promised by: {promisedByLabel(commitment.promisedBy)}
                     </Caption>
                     {commitment.dueDate && (
                       <Caption color="textMuted" style={{ marginLeft: Theme.spacing[3] }}>
@@ -666,7 +691,7 @@ function CommitmentsTab({ conversation, onToggleCommitment }: { conversation: Co
                   }
                   size="sm"
                 >
-                  {commitment.status.replace('_', ' ')}
+                  {commitmentStatusLabel(commitment.status)}
                 </Badge>
               </View>
 
@@ -766,7 +791,7 @@ function ReceiptTab({ conversation }: { conversation: Conversation }) {
                 <View style={styles.auditRow}>
                   <View style={styles.auditInfo}>
                     <Caption color="textPrimary" weight="semiBold">
-                      {event.action.replace('_', ' ')}
+                      {auditActionLabel(event.action)}
                     </Caption>
                     <Caption color="textMuted">
                       {event.actor} • {formatRelativeTime(event.timestamp)}

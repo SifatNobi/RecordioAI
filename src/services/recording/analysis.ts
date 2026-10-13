@@ -1,6 +1,7 @@
 import { API_BASE_URL } from '@/constants/env';
 import { ApiError } from '@/services/api';
 import { ConversationAnalysis } from '@/types';
+import { normalizeAnalysisLists } from '@/services/recording/normalizeAnalysis';
 
 export enum AnalysisErrorCode {
   NETWORK_UNAVAILABLE = 'NETWORK_UNAVAILABLE',
@@ -191,14 +192,20 @@ export async function analyzeTranscript(request: AnalysisRequest): Promise<Analy
       );
     }
 
+    // The backend extraction schema ({ category, commitment, quote, speaker })
+    // lacks the fields the UI requires. Normalize every list so render code
+    // never receives undefined ids, descriptions, promisedBy, or statuses.
+    const conversationId = request.conversationId || `conv_${Date.now()}`;
+    const lists = normalizeAnalysisLists(data.analysis, conversationId);
+
     const analysis: ConversationAnalysis = {
       id: data.analysis.id || `analysis_${Date.now()}`,
-      conversationId: request.conversationId || `conv_${Date.now()}`,
-      products: data.analysis.products || [],
-      prices: data.analysis.prices || [],
-      fees: data.analysis.fees || [],
-      commitments: data.analysis.commitments || [],
-      discrepancies: data.analysis.discrepancies || [],
+      conversationId,
+      products: lists.products,
+      prices: lists.prices,
+      fees: lists.fees,
+      commitments: lists.commitments,
+      discrepancies: lists.discrepancies,
       summary: data.analysis.summary || '',
       keyPoints: data.analysis.keyPoints || [],
       sentiment: data.analysis.sentiment || {
