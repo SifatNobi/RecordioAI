@@ -1,7 +1,10 @@
 import { Platform } from "react-native";
 import { storage } from "@/src/utils/storage";
 
-const BASE = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api`;
+// Empty default keeps API calls same-origin ("/api"), so the web build works behind
+// the deployment's own rewrites. Set EXPO_PUBLIC_BACKEND_URL to target another origin.
+const BACKEND_ORIGIN = process.env.EXPO_PUBLIC_BACKEND_URL ?? "";
+const BASE = `${BACKEND_ORIGIN}/api`;
 export const TOKEN_KEY = "recordio_session_token";
 
 let memToken: string | null = null;
