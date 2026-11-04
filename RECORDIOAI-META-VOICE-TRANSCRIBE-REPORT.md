@@ -131,17 +131,38 @@ installs `ffmpeg`. `GROQ_API_KEY` can remain configured as the fallback.
 - No Meta Model API key is available here, so a real Meta transcript has not
   been produced. The exact blocker is `401 invalid_api_key` from
   `GET https://api.meta.ai/v1/models`.
-- The production Render service still runs the previous backend until this
-  change is committed, pushed, and redeployed with `META_API_KEY` set.
-  `GET https://recordioai.onrender.com/v1/transcription/status` currently
-  returns `404`, confirming the new routes are not deployed yet.
+- The production Render service now runs the new backend (commit `d8e29b2`).
+  `GET https://recordioai.onrender.com/v1/transcription/status` returns `200`
+  with `meta.configured: false`, `meta.code: not_configured`, and
+  `groq.configured: true`; `GET /v1/transcription/models` returns `503` with
+  the sanitized "`META_API_KEY` is not configured" message. The only remaining
+  blocker for live Meta transcription is setting `META_API_KEY` on Render.
 - Meta accepts at most 10 minutes / 32 MB per file. Longer recordings fall back
   to Groq; they are not truncated or silently summarized.
 - The mobile app still records M4A/AAC and uses the file endpoint. The realtime
   proxy is available but is not wired to the native recorder, which would
   require a raw-PCM capture path.
 
-## State
+## Release and deployment
 
-All changes are uncommitted. No API keys were added to the repository, logs, or
-build artifacts.
+- Backend commit `d8e29b2` is pushed to `main` and is live on Render at
+  <https://recordioai.onrender.com>. Verified after deploy:
+  - `GET /health` → `200`, `database_configured: true`, `ai_provider: groq`.
+  - `GET /v1/transcription/status` → `200` (was `404` before the deploy).
+  - `GET /v1/transcription/models` → `503` with the sanitized
+    `META_API_KEY is not configured on the backend.` message.
+- Android release `1.2.21` (`versionCode 27`) was built from the same code with
+  `assembleRelease -PreactNativeArchitectures=arm64-v8a`:
+  - Artifact: `RecordioAI-v1.2.21-arm64-release.apk` (52,609,746 bytes).
+  - SHA-256: `E78BEB6794A388406284954028B778C533B92FAD6791A2C6F0CDDDF0B2F2EF35`.
+  - `applicationId com.recordioai.app`, versionName `1.2.21`, versionCode `27`,
+    native-code `arm64-v8a` only, minSdk 24, targetSdk 36.
+  - Signed with the generated debug keystore, as with previous test-store
+    builds. This is not a Play Store signing key.
+  - Bundle checks: `Not reported` and `HTTP_504` present, production API URL
+    `https://recordioai.onrender.com/v1` inlined, and no Groq/Meta key value
+    found in the bundle.
+- `npx tsc --noEmit` and `npx expo lint` pass (0 errors, 52 pre-existing
+  warnings) on the release commit.
+
+No API keys were added to the repository, logs, or build artifacts.
