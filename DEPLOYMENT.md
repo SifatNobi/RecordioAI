@@ -14,23 +14,45 @@ mobile app or Expo environment variables.
    image is defined by [`Dockerfile`](./Dockerfile).
 4. In the service's Environment settings, set these secret values:
    - `MONGO_URL`: the MongoDB connection string
-   - `GROQ_API_KEY`: the Groq API key
+   - `META_API_KEY`: the Meta Model API key used for Muse Voice
+     Transcribe. Keep it server-side only; never add it to `.env` values that
+     Expo embeds in the APK.
+   - `GROQ_API_KEY`: optional Groq fallback key
 5. Keep these non-secret values:
    - `DB_NAME=recordioai`
+   - `META_ASR_MODEL=muse-voice-transcribe-1.0` (verified at runtime through
+     `GET https://api.meta.ai/v1/models`; remove the override to auto-select
+     the newest available model)
+   - `META_ASR_TIMEOUT_SECONDS=120`
    - `GROQ_TRANSCRIPTION_MODEL=whisper-large-v3-turbo`
    - `GROQ_CHAT_MODEL=openai/gpt-oss-20b`
-6. Deploy the service and wait for the Render deploy to finish.
+6. Deploy the service and wait for the Render deploy to finish. The Docker
+   image installs `ffmpeg`, which converts the Android M4A/AAC recording into
+   the mono 16-bit PCM WAV (24 kHz) that Meta requires.
 7. Verify `https://<render-service>.onrender.com/health` returns HTTP 200 and
    reports `"status":"ok"`.
 8. Verify the API path used by the app at
    `https://<render-service>.onrender.com/v1/`.
-9. Verify the unauthenticated transcription contract with a safe audio sample:
-   `POST /v1/transcribe` with a multipart field named `file`. Transcription uses
-   the server-side Groq key; it does not accept or require a Groq key in the
-   mobile app. Record-management endpoints remain session-authenticated.
-10. Set `EXPO_PUBLIC_API_BASE_URL` locally to
+9. Verify the transcription provider configuration without exposing secrets:
+   - `GET /v1/transcription/status` reports whether Meta is configured and
+     whether the model id was verified.
+   - `GET /v1/transcription/models` returns the ASR model IDs available to the
+     server key.
+10. Verify the unauthenticated transcription contract with a safe audio sample:
+   `POST /v1/transcribe` with a multipart field named `file`. The backend uses
+   Meta first when configured and automatically falls back to Groq if Meta is
+   unavailable. Neither provider key is accepted from or returned to the mobile
+   app. Record-management endpoints remain session-authenticated.
+11. Set `EXPO_PUBLIC_API_BASE_URL` locally to
    `https://<render-service>.onrender.com/v1`, rebuild the Android app, and
    confirm that the final APK contains that URL.
+
+The realtime proxy is available at `wss://<render-service>.onrender.com/v1/asr/stream`.
+The first client frame is a JSON configuration object (mode, language, keywords,
+audioEncoding, pace); subsequent binary frames are raw PCM. The backend adds the
+server-side Meta credential in the documented `authorization.accessToken`
+handshake field and forwards Meta's transcript/speech events back to the client.
+Set `"pace": false` only if the caller already paces audio at real time.
 
 The current `api.recordioai.com` hostname has no public DNS record, so it must
 not be used for a release until DNS and HTTPS are configured and verified.

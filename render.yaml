@@ -11,6 +11,12 @@ services:
         sync: false
       - key: DB_NAME
         value: recordioai
+      - key: META_API_KEY
+        sync: false
+      - key: META_ASR_MODEL
+        value: muse-voice-transcribe-1.0
+      - key: META_ASR_TIMEOUT_SECONDS
+        value: 120
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_TRANSCRIPTION_MODEL

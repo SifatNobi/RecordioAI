@@ -8,8 +8,13 @@ export enum TranscriptionErrorCode {
   HTTP_401 = 'HTTP_401',
   HTTP_403 = 'HTTP_403',
   HTTP_413 = 'HTTP_413',
+  HTTP_415 = 'HTTP_415',
+  HTTP_422 = 'HTTP_422',
   HTTP_429 = 'HTTP_429',
   HTTP_500 = 'HTTP_500',
+  HTTP_502 = 'HTTP_502',
+  HTTP_503 = 'HTTP_503',
+  HTTP_504 = 'HTTP_504',
   INVALID_AUDIO = 'INVALID_AUDIO',
   AUDIO_CAPTURE_FAILED = 'AUDIO_CAPTURE_FAILED',
   TRANSCRIPTION_PROVIDER_ERROR = 'TRANSCRIPTION_PROVIDER_ERROR',
@@ -65,7 +70,8 @@ export interface TranscriptionOptions {
   profanityFilter?: boolean;
 }
 
-const TRANSCRIPTION_TIMEOUT = 120000;
+const TRANSCRIPTION_TIMEOUT = 180000;
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
 function isAbortError(error: unknown): boolean {
   return (
@@ -119,6 +125,20 @@ function classifyError(error: unknown): TranscriptionError {
           error.status,
           error.details
         );
+      case 415:
+        return new TranscriptionError(
+          'This audio format is not supported. Please try a WAV or M4A recording.',
+          TranscriptionErrorCode.HTTP_415,
+          error.status,
+          error.details
+        );
+      case 422:
+        return new TranscriptionError(
+          error.message || 'No speech was detected in the recording.',
+          TranscriptionErrorCode.HTTP_422,
+          error.status,
+          error.details
+        );
       case 429:
         return new TranscriptionError(
           'Too many requests. Please wait a moment and try again.',
@@ -130,6 +150,23 @@ function classifyError(error: unknown): TranscriptionError {
         return new TranscriptionError(
           'Transcription service temporarily unavailable. Please try again later.',
           TranscriptionErrorCode.HTTP_500,
+          error.status,
+          error.details
+        );
+      case 502:
+      case 503:
+        return new TranscriptionError(
+          error.message || 'Transcription service is not available right now. Please try again later.',
+          error.status === 503
+            ? TranscriptionErrorCode.HTTP_503
+            : TranscriptionErrorCode.HTTP_502,
+          error.status,
+          error.details
+        );
+      case 504:
+        return new TranscriptionError(
+          error.message || 'Transcription timed out. Please try again.',
+          TranscriptionErrorCode.HTTP_504,
           error.status,
           error.details
         );
@@ -178,8 +215,8 @@ async function validateAudioFile(fileUri: string): Promise<{ valid: boolean; err
       return { valid: false, error: 'Audio file is empty' };
     }
 
-    if (fileInfo.size > 100 * 1024 * 1024) {
-      return { valid: false, error: 'Audio file exceeds 100MB limit' };
+    if (fileInfo.size > MAX_AUDIO_BYTES) {
+      return { valid: false, error: 'Audio file exceeds 25MB limit' };
     }
 
     const mimeType = fileUri.split('.').pop()?.toLowerCase();
@@ -277,13 +314,15 @@ export async function transcribeAudio(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      let errorData: { message?: string; code?: string; details?: unknown } = {};
+      let errorData: { message?: string; detail?: string; code?: string; details?: unknown } = {};
       try {
         errorData = await response.json();
       } catch {
       }
       throw new ApiError(
-        errorData.message || `Transcription failed with status ${response.status}`,
+        errorData.message ||
+          errorData.detail ||
+          `Transcription failed with status ${response.status}`,
         response.status,
         errorData.code,
         errorData.details
@@ -292,7 +331,7 @@ export async function transcribeAudio(
 
     const data = await response.json();
 
-    if (!data.transcript || data.transcript.trim() === '') {
+    if (typeof data.transcript !== 'string' || data.transcript.trim() === '') {
       throw new TranscriptionError(
         'Transcription returned empty result',
         TranscriptionErrorCode.EMPTY_TRANSCRIPT
@@ -302,8 +341,9 @@ export async function transcribeAudio(
     return {
       transcript: data.transcript,
       language: data.language || options.language || 'en',
-      confidence: data.confidence ?? 0.9,
-      segments: data.segments || [],
+      // Meta does not return a confidence score. Do not invent one.
+      confidence: typeof data.confidence === 'number' ? data.confidence : 0,
+      segments: Array.isArray(data.segments) ? data.segments : [],
       provider: data.provider || 'unknown',
       providerId: data.providerId || '',
     };

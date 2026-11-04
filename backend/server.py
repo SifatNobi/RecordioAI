@@ -6,11 +6,23 @@ import hashlib
 import logging
 import tempfile
 import secrets
+import time
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict
 
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Header, Depends
+from fastapi import (
+    FastAPI,
+    APIRouter,
+    UploadFile,
+    File,
+    Form,
+    HTTPException,
+    Header,
+    Depends,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -19,7 +31,21 @@ import httpx
 from eth_account import Account
 
 from emergentintegrations_replacement import LlmChat, UserMessage, OpenAISpeechToText
-from providers import active_ai_provider, extract_with_groq, groq_enabled, transcribe_with_groq
+from providers import (
+    DEFAULT_GROQ_TRANSCRIPTION_MODEL,
+    active_ai_provider,
+    extract_with_groq,
+    groq_enabled,
+    transcribe_with_groq,
+)
+from meta_asr import (
+    MetaASRError,
+    MetaRealtimeSession,
+    list_meta_models,
+    meta_configured,
+    select_meta_asr_model,
+    transcribe_with_meta,
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -326,10 +352,61 @@ async def trial(user=Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 # Transcription
 # ---------------------------------------------------------------------------
+def _transcription_provider_order() -> list[str]:
+    providers: list[str] = []
+    if meta_configured():
+        providers.append("meta")
+    if groq_enabled():
+        providers.append("groq")
+    if EMERGENT_LLM_KEY:
+        providers.append("emergent")
+    return providers
+
+
+async def _transcribe_with_emergent(audio_bytes: bytes, suffix: str) -> str:
+    if not EMERGENT_LLM_KEY:
+        raise RuntimeError("EMERGENT_LLM_KEY is not configured.")
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(audio_bytes)
+            tmp_path = tmp.name
+        stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
+        with open(tmp_path, "rb") as audio_file:
+            result = await asyncio.wait_for(
+                stt.transcribe(audio_file, model="whisper-1", response_format="text"),
+                timeout=120,
+            )
+        text = result if isinstance(result, str) else getattr(result, "text", str(result))
+        return str(text or "")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
 @api.post("/transcribe")
-async def transcribe(file: UploadFile = File(...)):
+async def transcribe(
+    file: UploadFile = File(...),
+    language: Optional[str] = Form(None),
+    speaker_diarization: Optional[bool] = Form(None),
+    # Accepted for backwards compatibility with the mobile client. Meta does
+    # not expose punctuation/profanity toggles, so they are intentionally unused.
+    punctuate: Optional[bool] = Form(None),
+    profanity_filter: Optional[bool] = Form(None),
+):
     suffix = Path(file.filename or "audio.m4a").suffix.lower() or ".m4a"
-    if suffix.lstrip(".") not in {"mp3", "mp4", "mpeg", "mpga", "m4a", "wav", "webm"}:
+    if suffix.lstrip(".") not in {
+        "mp3",
+        "mp4",
+        "mpeg",
+        "mpga",
+        "m4a",
+        "wav",
+        "webm",
+        "aac",
+        "ogg",
+        "flac",
+    }:
         raise HTTPException(status_code=415, detail="Unsupported audio format")
     audio_bytes = await file.read()
     if not audio_bytes:
@@ -339,43 +416,384 @@ async def transcribe(file: UploadFile = File(...)):
 
     audio_sha256 = hashlib.sha256(audio_bytes).hexdigest()
 
-    provider = "groq" if groq_enabled() else "emergent"
+    providers = _transcription_provider_order()
+    if not providers:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "No transcription provider is configured. Add META_API_KEY "
+                "(Meta Muse Voice Transcribe) or GROQ_API_KEY to the backend environment."
+            ),
+        )
+
     transcript = ""
-    tmp_path = None
-    try:
-        if groq_enabled():
-            transcript = await transcribe_with_groq(audio_bytes, file.filename or "audio.m4a")
-        else:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(audio_bytes)
-                tmp_path = tmp.name
-            if not EMERGENT_LLM_KEY:
-                raise HTTPException(
-                    status_code=503,
-                    detail="No transcription provider is configured. Add GROQ_API_KEY or EMERGENT_LLM_KEY to backend/.env.",
+    used_provider = ""
+    used_model = ""
+    provider_id = ""
+    segments: list[dict] = []
+    detected_language: Optional[str] = None
+    failures: dict[str, str] = {}
+    mode = "DIARIZATION" if speaker_diarization else "PUSH_TO_TALK"
+    filename = file.filename or "audio.m4a"
+
+    for provider in providers:
+        try:
+            if provider == "meta":
+                result = await transcribe_with_meta(
+                    audio_bytes,
+                    filename=filename,
+                    mode=mode,
+                    language=language,
                 )
-            stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
-            with open(tmp_path, "rb") as audio_file:
-                result = await stt.transcribe(audio_file, model="whisper-1", response_format="text")
-            transcript = result if isinstance(result, str) else getattr(result, "text", str(result))
-        transcript = (transcript or "").strip()
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Transcription failed via %s: %s", provider, str(e))
-        raise HTTPException(status_code=502, detail="Transcription service failed. Please try again or paste the transcript manually.")
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
+                transcript = result.transcript
+                used_model = result.model
+                provider_id = result.session_id
+                segments = result.segments
+                detected_language = result.language
+            elif provider == "groq":
+                transcript = await transcribe_with_groq(audio_bytes, filename)
+                used_model = os.getenv(
+                    "GROQ_TRANSCRIPTION_MODEL",
+                    DEFAULT_GROQ_TRANSCRIPTION_MODEL,
+                )
+            else:
+                transcript = await _transcribe_with_emergent(audio_bytes, suffix)
 
-    if not transcript:
-        raise HTTPException(status_code=422, detail="No speech detected in the recording.")
+            transcript = (transcript or "").strip()
+            if not transcript:
+                failures[provider] = "empty transcript"
+                continue
+            used_provider = provider
+            break
+        except MetaASRError as exc:
+            # The message is already sanitised. Log only the machine code so a
+            # provider response can never leak the backend credential.
+            failures[provider] = exc.code
+            logger.warning("Meta transcription unavailable: %s", exc.code)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            failures[provider] = type(exc).__name__
+            logger.warning("Transcription provider %s failed: %s", provider, type(exc).__name__)
 
-    return {
+    if not used_provider:
+        if failures and all(reason == "empty transcript" for reason in failures.values()):
+            raise HTTPException(status_code=422, detail="No speech detected in the recording.")
+        if any(reason == "authentication_error" for reason in failures.values()):
+            raise HTTPException(
+                status_code=502,
+                detail="Transcription provider authentication failed. Check the backend API key.",
+            )
+        if any("timeout" in reason.lower() for reason in failures.values()):
+            raise HTTPException(
+                status_code=504,
+                detail="Transcription timed out. Please try again.",
+            )
+        logger.error("All transcription providers failed: %s", sorted(failures))
+        raise HTTPException(
+            status_code=502,
+            detail="Transcription service failed. Please try again or paste the transcript manually.",
+        )
+
+    response = {
         "transcript": transcript,
         "audio_sha256": audio_sha256,
-        "provider": provider,
+        "provider": "meta" if used_provider == "meta" else used_provider,
+        "model": used_model,
+        "providerId": provider_id,
+        "segments": segments,
     }
+    if used_provider == "meta":
+        response["provider"] = "meta-muse-voice-transcribe"
+    if detected_language:
+        response["language"] = detected_language
+    return response
+
+
+@api.get("/transcription/status")
+async def transcription_status():
+    """Report provider configuration without ever exposing credentials."""
+
+    meta: dict[str, object] = {
+        "configured": meta_configured(),
+        "documented_model": "muse-voice-transcribe-1.0",
+        "model_override": os.getenv("META_ASR_MODEL") or None,
+    }
+    if meta_configured():
+        try:
+            models = await list_meta_models()
+            selected = select_meta_asr_model(models, os.getenv("META_ASR_MODEL"))
+            meta.update(
+                {
+                    "verified": True,
+                    "model": selected,
+                    "available_asr_models": [
+                        item["id"]
+                        for item in models
+                        if "voice-transcribe" in item["id"].lower()
+                    ],
+                }
+            )
+        except MetaASRError as exc:
+            meta.update(
+                {
+                    "verified": False,
+                    "code": exc.code,
+                    "error": exc.public_message,
+                }
+            )
+    else:
+        meta.update(
+            {
+                "verified": False,
+                "code": "not_configured",
+                "error": "META_API_KEY is not configured on the backend.",
+            }
+        )
+
+    return {
+        "primary": "meta" if meta_configured() else ("groq" if groq_enabled() else "none"),
+        "fallback": "groq" if groq_enabled() else ("emergent" if EMERGENT_LLM_KEY else "none"),
+        "meta": meta,
+        "groq": {
+            "configured": groq_enabled(),
+            "model": os.getenv("GROQ_TRANSCRIPTION_MODEL", DEFAULT_GROQ_TRANSCRIPTION_MODEL),
+        },
+        "emergent": {"configured": bool(EMERGENT_LLM_KEY)},
+    }
+
+
+@api.get("/transcription/models")
+async def transcription_models():
+    """Verify the Meta catalogue and return the ASR model ids available to this key."""
+
+    if not meta_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="META_API_KEY is not configured on the backend.",
+        )
+    try:
+        models = await list_meta_models(force=True)
+        selected = select_meta_asr_model(models, os.getenv("META_ASR_MODEL"))
+    except MetaASRError as exc:
+        raise HTTPException(
+            status_code=exc.status or 502,
+            detail=exc.public_message,
+        ) from exc
+    return {
+        "selected": selected,
+        "models": [
+            item
+            for item in models
+            if "voice-transcribe" in item["id"].lower() or "asr" in item["id"].lower()
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Realtime transcription proxy
+# ---------------------------------------------------------------------------
+# The mobile app must never hold a Meta key. This endpoint accepts a small JSON
+# configuration frame followed by raw PCM binary frames, streams them to Meta
+# with the server-side credential, and forwards the documented server events.
+@api.websocket("/asr/stream")
+async def asr_stream(websocket: WebSocket):
+    await websocket.accept()
+
+    if not meta_configured():
+        await websocket.send_json(
+            {
+                "type": "error",
+                "message": "Realtime transcription is not configured on the backend.",
+                "errorCode": "not_configured",
+            }
+        )
+        await websocket.close(code=1011)
+        return
+
+    try:
+        first = await asyncio.wait_for(websocket.receive(), timeout=10)
+    except asyncio.TimeoutError:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "message": "Send the realtime configuration frame within 10 seconds.",
+                "errorCode": "handshake_timeout",
+            }
+        )
+        await websocket.close(code=1008)
+        return
+
+    if first.get("type") == "websocket.disconnect":
+        return
+    raw_config = first.get("text")
+    if not raw_config:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "message": "The first frame must be a JSON configuration object.",
+                "errorCode": "invalid_handshake",
+            }
+        )
+        await websocket.close(code=1008)
+        return
+    try:
+        config = json.loads(raw_config)
+    except ValueError:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "message": "The configuration frame is not valid JSON.",
+                "errorCode": "invalid_handshake",
+            }
+        )
+        await websocket.close(code=1008)
+        return
+    if not isinstance(config, dict):
+        await websocket.send_json(
+            {
+                "type": "error",
+                "message": "The configuration frame must be a JSON object.",
+                "errorCode": "invalid_handshake",
+            }
+        )
+        await websocket.close(code=1008)
+        return
+
+    mode = str(config.get("mode") or "PUSH_TO_TALK")
+    if mode not in {"PUSH_TO_TALK", "ENDPOINTING", "DIARIZATION"}:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "message": "Unsupported transcription mode.",
+                "errorCode": "invalid_mode",
+            }
+        )
+        await websocket.close(code=1008)
+        return
+
+    audio_encoding = str(config.get("audioEncoding") or "PCM_24KHZ")
+    if audio_encoding not in {"PCM_24KHZ", "PCM_16KHZ"}:
+        audio_encoding = "PCM_24KHZ"
+    requested_session_id = config.get("sessionId")
+    if isinstance(requested_session_id, str):
+        requested_session_id = requested_session_id[:128] or None
+    else:
+        requested_session_id = None
+
+    try:
+        session = await MetaRealtimeSession.connect(
+            mode=mode,
+            language=config.get("language") if isinstance(config.get("language"), str) else None,
+            keywords=config.get("keywords") if isinstance(config.get("keywords"), list) else None,
+            audio_encoding=audio_encoding,
+            session_id=requested_session_id,
+        )
+    except MetaASRError as exc:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "message": exc.public_message,
+                "errorCode": exc.code,
+            }
+        )
+        await websocket.close(code=1011 if exc.code != "handshake_rejected" else 1008)
+        return
+
+    await websocket.send_json(
+        {"type": "ready", "sessionId": session.session_id, "model": session.model}
+    )
+
+    pace = config.get("pace", True) is not False
+    bytes_per_second = 48_000 if audio_encoding == "PCM_24KHZ" else 32_000
+    audio_started: Optional[float] = None
+    audio_sent = 0
+    input_ended = False
+
+    async def forward_client_audio() -> None:
+        nonlocal audio_started, audio_sent, input_ended
+        while True:
+            message = await websocket.receive()
+            if message.get("type") == "websocket.disconnect":
+                # Stop the upstream Meta session as soon as the app goes away;
+                # otherwise the receiver would wait on a stream nobody is
+                # listening to.
+                await session.close()
+                return
+            chunk = message.get("bytes")
+            if chunk:
+                if pace:
+                    # Start the pacing clock on the first audio frame, not when
+                    # the socket opened; a client may configure and then wait.
+                    if audio_started is None:
+                        audio_started = time.monotonic()
+                    audio_sent += len(chunk)
+                    target = audio_sent / bytes_per_second
+                    delay = target - (time.monotonic() - audio_started)
+                    if delay > 0:
+                        await asyncio.sleep(delay)
+                await session.send_audio(chunk)
+                continue
+            text = message.get("text")
+            if not text:
+                continue
+            try:
+                control = json.loads(text)
+            except ValueError:
+                continue
+            if isinstance(control, dict) and control.get("type") == "endStream":
+                await session.end_stream()
+                input_ended = True
+                return
+
+    sender = asyncio.create_task(forward_client_audio())
+    upstream_error = False
+    try:
+        async for event in session.events():
+            try:
+                await websocket.send_json(event)
+            except Exception:
+                # The client disconnected while Meta was still emitting events.
+                upstream_error = True
+                break
+            if event.get("type") == "error":
+                upstream_error = True
+                break
+    except WebSocketDisconnect:
+        upstream_error = True
+    finally:
+        if not sender.done():
+            sender.cancel()
+        try:
+            await sender
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
+        await session.close()
+
+    if upstream_error:
+        try:
+            await websocket.close(code=1011)
+        except Exception:
+            pass
+        return
+    if session.close_code == 1000:
+        try:
+            await websocket.close(code=1000)
+        except Exception:
+            pass
+        return
+    if session.close_code in (1008, 1011, 1013):
+        try:
+            await websocket.close(code=session.close_code)
+        except Exception:
+            pass
+        return
+    try:
+        await websocket.close(code=1008 if not input_ended else 1011)
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------

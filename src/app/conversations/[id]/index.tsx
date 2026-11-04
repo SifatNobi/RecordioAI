@@ -434,7 +434,9 @@ function TranscriptTab({ conversation }: { conversation: Conversation }) {
         <View style={styles.transcriptMeta}>
           <Caption color="textMuted">Confidence</Caption>
           <Body color="textPrimary">
-            {Math.round(conversation.transcript.confidence * 100)}%
+            {conversation.transcript.confidence > 0
+              ? `${Math.round(conversation.transcript.confidence * 100)}%`
+              : 'Not reported'}
           </Body>
         </View>
         <View style={styles.transcriptMeta}>
@@ -490,7 +492,9 @@ function TranscriptSegmentComponent({ segment }: { segment: TranscriptSegment })
             {speakerLabels[segment.speaker]}
           </H4>
           <Badge variant="default" size="sm" style={styles.confidenceBadge}>
-            {Math.round(segment.confidence * 100)}%
+            {segment.confidence > 0
+              ? `${Math.round(segment.confidence * 100)}%`
+              : 'Not reported'}
           </Badge>
         </View>
         <Caption color="textMuted" style={styles.segmentTime}>
