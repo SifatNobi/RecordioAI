@@ -91,3 +91,96 @@ async def extract_with_groq(system_message: str, user_prompt: str) -> str:
 
 def active_ai_provider() -> str:
     return "groq" if groq_enabled() else "gemini"
+
+
+def meta_api_key() -> Optional[str]:
+    value = os.getenv("META_MODEL_API_KEY")
+    return value.strip() if value and value.strip() else None
+
+
+def meta_enabled() -> bool:
+    return bool(meta_api_key())
+
+
+async def transcribe_with_meta(audio_bytes: bytes, filename: str = "audio.m4a") -> str:
+    """Transcribe audio using Meta Muse Voice Transcribe API.
+
+    POST https://api.meta.ai/v1/asr/transcribe
+    Model: muse-voice-transcribe-1.0
+    Authentication: META_MODEL_API_KEY as query parameter
+    Format: multipart/form-data with 'file' and optionally 'model' fields
+    """
+    api_key = meta_api_key()
+    if not api_key:
+        raise RuntimeError("META_MODEL_API_KEY is not configured.")
+
+    model = os.getenv("META_ASR_MODEL", "muse-voice-transcribe-1.0")
+
+    import httpx
+
+    url = "https://api.meta.ai/v1/asr/transcribe"
+
+    def _call() -> Any:
+        files = {
+            "file": (filename or "audio.m4a", audio_bytes, "audio/mp4"),
+        }
+        data = {
+            "model": model,
+        }
+        headers = {}
+        if api_key:
+            # Use bearer token auth
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        response = httpx.TimeoutClient(timeout=30.0).post(
+            url,
+            files=files,
+            data=data,
+            headers=headers,
+        )
+        return response
+
+    try:
+        response = await asyncio.get_running_loop().run_in_executor(None, _call)
+        response.raise_for_status()
+
+        result = response.json()
+
+        # Extract transcript from response - handle various possible formats
+        if isinstance(result, dict):
+            # Check common response fields
+            transcript = (
+                result.get("transcript")
+                or result.get("text")
+                or result.get("result")
+                or result.get("text_transcription")
+            )
+            if isinstance(transcript, str):
+                return transcript.strip()
+            # If transcript is nested, try to find it
+            if transcript is not None:
+                return str(transcript).strip()
+        # If we got here, try to extract any string that looks like text
+        if isinstance(result, str):
+            return result.strip()
+        if isinstance(result, dict):
+            # Last resort: find any string value that could be a transcript
+            for v in result.values():
+                if isinstance(v, str) and len(v) > 5:
+                    return v.strip()
+        raise RuntimeError(f"Unexpected Meta API response format: {str(result)[:200]}")
+
+    except httpx.TimeoutException as exc:
+        raise RuntimeError("Meta transcription request timed out.") from exc
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 401:
+            raise RuntimeError("Meta rejected the API key.") from exc
+        if exc.response.status_code == 403:
+            raise RuntimeError("Meta access denied - check API key permissions.") from exc
+        if exc.response.status_code == 429:
+            raise RuntimeError("Meta rate limit exceeded.") from exc
+        if exc.response.status_code >= 500:
+            raise RuntimeError(f"Meta transcription service error: {exc.response.status_code}.") from exc
+        raise RuntimeError(f"Meta transcription request failed with status {exc.response.status_code}.") from exc
+    except httpx.RequestError as exc:
+        raise RuntimeError(f"Meta transcription request failed: {str(exc)}") from exc

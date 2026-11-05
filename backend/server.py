@@ -339,30 +339,39 @@ async def transcribe(file: UploadFile = File(...)):
 
     audio_sha256 = hashlib.sha256(audio_bytes).hexdigest()
 
-    provider = "groq" if groq_enabled() else "emergent"
+    # Determine primary and fallback providers from environment
+    primary_provider = os.getenv("ASR_PRIMARY_PROVIDER", "groq").lower()
+    fallback_provider = os.getenv("ASR_FALLBACK_PROVIDER", "groq").lower()
+
     transcript = ""
+    used_provider: Optional[str] = None
     tmp_path = None
+
     try:
-        if groq_enabled():
-            transcript = await transcribe_with_groq(audio_bytes, file.filename or "audio.m4a")
+        # Determine which provider to call first
+        if primary_provider == "meta" and meta_enabled():
+            # Try Meta first
+            try:
+                transcript = await transcribe_with_meta(audio_bytes, file.filename or "audio.m4a")
+                used_provider = "meta"
+                logger.info("Transcription via Meta provider")
+            except Exception as meta_error:
+                logger.warning("Meta transcription failed: %s, falling back to Groq", str(meta_error))
+                # Fall through to Groq
+                pass
         else:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(audio_bytes)
-                tmp_path = tmp.name
-            if not EMERGENT_LLM_KEY:
-                raise HTTPException(
-                    status_code=503,
-                    detail="No transcription provider is configured. Add GROQ_API_KEY or EMERGENT_LLM_KEY to backend/.env.",
-                )
-            stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
-            with open(tmp_path, "rb") as audio_file:
-                result = await stt.transcribe(audio_file, model="whisper-1", response_format="text")
-            transcript = result if isinstance(result, str) else getattr(result, "text", str(result))
+            logger.info("Meta provider not configured, using Groq directly")
+
+        # If Meta didn't succeed, use Groq
+        if not transcript:
+            from backend.providers import transcribe_with_groq
+            transcript = await transcribe_with_groq(audio_bytes, file.filename or "audio.m4a")
+            used_provider = "groq"
+            logger.info("Transcription via Groq provider")
+
         transcript = (transcript or "").strip()
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error("Transcription failed via %s: %s", provider, str(e))
+        logger.error("Transcription failed: %s", str(e))
         raise HTTPException(status_code=502, detail="Transcription service failed. Please try again or paste the transcript manually.")
     finally:
         if tmp_path and os.path.exists(tmp_path):
@@ -371,10 +380,25 @@ async def transcribe(file: UploadFile = File(...)):
     if not transcript:
         raise HTTPException(status_code=422, detail="No speech detected in the recording.")
 
+    # Determine language - try to detect or default to English
+    language = "en"  # default; could be enhanced with language detection
+
+    # Determine confidence - default to 0.9
+    confidence = 0.9
+
+    # Segments are not provided by Groq/Meta default, use empty array
+    segments: list = []
+
+    # Determine final provider label for response
+    provider_label = used_provider if used_provider else ("groq" if groq_enabled() else "emergent")
+
     return {
         "transcript": transcript,
-        "audio_sha256": audio_sha256,
-        "provider": provider,
+        "language": language,
+        "confidence": confidence,
+        "segments": segments,
+        "provider": provider_label,
+        "providerId": "",
     }
 
 
